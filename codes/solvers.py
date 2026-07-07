@@ -3,7 +3,6 @@ from profiler import Profiler
 
 _rng = np.random.default_rng()
 
-
 def _save_conflict_plot(time_list, n_conflicts_list, title, filename):
     try:
         import matplotlib.pyplot as plt
@@ -20,11 +19,6 @@ def _save_conflict_plot(time_list, n_conflicts_list, title, filename):
     plt.savefig(filename, dpi=300, bbox_inches="tight")
     plt.close()
 
-
-def _metropolis_acceptance(beta, energy_delta):
-    if energy_delta <= 0:
-        return 1.0
-    return np.exp(-beta * energy_delta)
 
 class Solver:
     def __init__(self, g1, q, beta = 1.0, n_seconds=None):
