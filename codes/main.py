@@ -4,7 +4,10 @@ import time
 import numpy as np
 
 from graph_colorer import Graph
-from solvers import LiftedChromaticPottsSolver, PottsSolver, RandomSolver
+from lifted_solver import LiftSolver
+from metropolis_solver import MetropolisSolver
+from gibbs_solver import GibbsSolver
+from random_solver import RandomSolver
 
 
 _rng = np.random.default_rng()
@@ -65,65 +68,6 @@ def run_random_recoloring(graph_path, q, beta, n_seconds):
     wall_time = time.perf_counter() - start
     return trace, wall_time, graph.count_conflicts()
 
-
-def run_single_site_potts(graph_path, q, beta, n_seconds):
-    graph = Graph().from_file(graph_path)
-    initialize_random_colors(graph, q)
-    solver = PottsSolver(graph, q, beta=beta, n_seconds=n_seconds)
-    solver.save_plot = False
-
-    conflicts = graph.count_conflicts()
-    trace = []
-    start = time.perf_counter()
-
-    while time.perf_counter() - start < n_seconds:
-        for _ in range(graph.n_nodes):
-            node_i = int(_rng.integers(0, graph.n_nodes))
-            node = graph.nodes[node_i]
-            old_color = node.color
-            old_local_conflicts = graph.count_conflicts_i(node_i)
-
-            node.color = int(_rng.integers(0, q))
-            new_local_conflicts = graph.count_conflicts_i(node_i)
-            new_conflicts = conflicts - old_local_conflicts + new_local_conflicts
-
-            if _rng.random() < metropolis_acceptance(beta, new_conflicts - conflicts):
-                conflicts = new_conflicts
-            else:
-                node.color = old_color
-
-        trace.append(conflicts)
-
-    wall_time = time.perf_counter() - start
-    return trace, wall_time, conflicts
-
-
-def run_lifted_chromatic_potts(graph_path, q, beta, n_seconds, refresh_rate):
-    graph = Graph().from_file(graph_path)
-    initialize_random_colors(graph, q)
-    solver = LiftedChromaticPottsSolver(
-        graph,
-        q,
-        beta=beta,
-        n_seconds=n_seconds,
-        refresh_rate=refresh_rate,
-    )
-    solver.save_plot = False
-
-    conflicts = graph.count_conflicts()
-    trace = []
-    start = time.perf_counter()
-
-    while time.perf_counter() - start < n_seconds:
-        for color_class in solver.color_classes:
-            for node_i in color_class:
-                conflicts = solver._try_lifted_move(node_i, conflicts)
-        trace.append(conflicts)
-
-    wall_time = time.perf_counter() - start
-    return trace, wall_time, conflicts
-
-
 def benchmark_model(name, runner, graph_path, q, beta, n_seconds, refresh_rate):
     if name == "LiftedChromaticPotts":
         trace, wall_time, final_conflicts = runner(graph_path, q, beta, n_seconds, refresh_rate)
@@ -170,23 +114,23 @@ def parse_args():
 
 
 def main():
-    args = parse_args()
-    models = [
-        ("RandomRecoloring", run_random_recoloring),
-        ("SingleSitePotts", run_single_site_potts),
-        ("LiftedChromaticPotts", run_lifted_chromatic_potts),
-    ]
+    graph = Graph().from_file("graphs/graph2.txt")
 
-    print(
-        f"Benchmarking {args.graph} with q={args.q}, beta={args.beta}, "
-        f"{args.seconds:.1f}s per sampler"
-    )
+    temperature = 0.1
 
-    results = [
-        benchmark_model(name, runner, args.graph, args.q, args.beta, args.seconds, args.refresh_rate)
-        for name, runner in models
-    ]
-    print_results(results)
+    q = 5
+    beta = 1 / temperature
+    run_time = 3.0
+
+    random_solver = RandomSolver(graph, q, beta, run_time)
+    metropolis_solver = MetropolisSolver(graph, q, beta, run_time)
+    gibbs_solver = GibbsSolver(graph, q, beta, run_time)
+    lifted_solver = LiftSolver(graph, q, beta, run_time)
+
+    random_solver.solve()
+    metropolis_solver.solve()
+    gibbs_solver.solve()
+    lifted_solver.solve()
 
 
 if __name__ == "__main__":
