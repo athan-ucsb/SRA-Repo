@@ -58,7 +58,7 @@ class MetropolisSolver(Solver):
             _save_conflict_plot(
                 time_list,
                 n_conflicts_list,
-                'Conflicts vs Time',
+                'Conflicts vs Time - Metropolis',
                 "stats/metropolis_solver.png",
             )
 

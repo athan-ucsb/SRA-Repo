@@ -116,8 +116,10 @@ def parse_args():
 def main():
     graph = Graph().from_file("graphs/graph5.txt")
 
+    temperature = 0.1
+
     q = 3
-    beta = 10
+    beta = 1 / temperature
     run_time = 3.0
 
     random_solver = RandomSolver(graph, q, beta, run_time)

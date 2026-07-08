@@ -45,8 +45,6 @@ class LiftSolver(Solver):
             else:
                 node.color = new_color
 
-            node.color = new_color
-
             new_local_conflicts = self.g1.count_conflicts_i(node_i)
 
             # update new number of conflicts
@@ -71,7 +69,7 @@ class LiftSolver(Solver):
             _save_conflict_plot(
                 time_list,
                 n_conflicts_list,
-                'Conflicts vs Time',
+                'Conflicts vs Time - Lifted',
                 "stats/lifted_solver.png",
             )
 

@@ -40,7 +40,7 @@ class RandomSolver(Solver):
             _save_conflict_plot(
                 time_list,
                 n_conflicts_list,
-                'Conflicts vs Time',
+                'Conflicts vs Time - Random',
                 "stats/random_solver.png",
             )
 
