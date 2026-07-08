@@ -8,15 +8,15 @@ def _metropolis_acceptance(beta, energy_delta):
     return np.exp(-beta * energy_delta)
 
 
-def gibbs_sampler(g, node_i, beta):
+def gibbs_sampler(g, node_i, q, beta):
     nd = g.nodes[node_i]
 
     old_local_conflicts = g.count_conflicts_i(node_i)
     old_color = nd.color
 
-    pmf = np.zeros(g.q)
+    pmf = np.zeros(q)
 
-    for new_color in range(g.q):
+    for new_color in range(q):
         nd.color = new_color
 
         new_local_conflicts = g.count_conflicts_i(node_i)
@@ -33,24 +33,22 @@ def gibbs_sampler(g, node_i, beta):
 
     pmf /= total
 
-    sample = _rng.random_choice(np.arange(g.q), pmf)
+    sample = int(_rng.choice(np.arange(q), p = pmf))
 
     nd.color = sample
     d_conflicts = g.count_conflicts_i(node_i) - old_local_conflicts
 
     nd.color = old_color
 
-    return sample, d_conflicts
+    return sample
         
 
 # returns new color and the change in conflicts
-def metropolis_sampler(g, node_i, beta, new_color_i = None):
+def metropolis_sampler(g, node_i, beta, q, new_color = None):
     nd = g.nodes[node_i]
 
-    new_color = _rng.integers(0, g.q)
-    
-    if not new_color_i is None:
-        new_color = new_color_i
+    if new_color is None:
+        new_color = _rng.integers(0, q)
 
     old_color = nd.color
 
@@ -69,10 +67,10 @@ def metropolis_sampler(g, node_i, beta, new_color_i = None):
     nd.color = old_color
     
     if _rng.random() < prob:
-        return new_color, d_conflicts
+        return new_color
 
     else:
-        return old_color, d_conflicts
+        return old_color
     
 # def _greedy_independent_sets(graph):
 #     node_to_class = [-1 for _ in range(graph.n_nodes)]
