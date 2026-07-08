@@ -73,3 +73,26 @@ def metropolis_sampler(g, node_i, beta, new_color_i = None):
 
     else:
         return old_color, d_conflicts
+    
+# def _greedy_independent_sets(graph):
+#     node_to_class = [-1 for _ in range(graph.n_nodes)]
+#     color_classes = []
+
+#     for node_id in range(graph.n_nodes):
+#         unavailable = {
+#             node_to_class[neighbor_id]
+#             for neighbor_id in graph.edges[node_id]
+#             if node_to_class[neighbor_id] != -1
+#         }
+
+#         class_id = 0
+#         while class_id in unavailable:
+#             class_id += 1
+
+#         if class_id == len(color_classes):
+#             color_classes.append([])
+
+#         color_classes[class_id].append(node_id)
+#         node_to_class[node_id] = class_id
+
+#     return color_classes

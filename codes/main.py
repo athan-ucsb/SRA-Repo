@@ -4,7 +4,9 @@ import time
 import numpy as np
 
 from graph_colorer import Graph
-from solvers import LiftedChromaticPottsSolver, PottsSolver, RandomSolver
+
+from metropolis_solver import MetropolisSolver
+from random_solver import RandomSolver
 
 
 _rng = np.random.default_rng()
@@ -66,10 +68,10 @@ def run_random_recoloring(graph_path, q, beta, n_seconds):
     return trace, wall_time, graph.count_conflicts()
 
 
-def run_single_site_potts(graph_path, q, beta, n_seconds):
+def run_single_site_metropolis(graph_path, q, beta, n_seconds):
     graph = Graph().from_file(graph_path)
     initialize_random_colors(graph, q)
-    solver = PottsSolver(graph, q, beta=beta, n_seconds=n_seconds)
+    solver = MetropolisSolver(graph, q, beta=beta, n_seconds=n_seconds)
     solver.save_plot = False
 
     conflicts = graph.count_conflicts()
@@ -173,8 +175,7 @@ def main():
     args = parse_args()
     models = [
         ("RandomRecoloring", run_random_recoloring),
-        ("SingleSitePotts", run_single_site_potts),
-        ("LiftedChromaticPotts", run_lifted_chromatic_potts),
+        ("SingleSiteMetropolis", run_single_site_metropolis),
     ]
 
     print(
