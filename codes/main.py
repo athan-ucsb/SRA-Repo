@@ -114,7 +114,7 @@ def parse_args():
 
 
 def main():
-    graph = Graph().from_file("graphs/graph5.txt")
+    graph = Graph().from_file("graphs/graph3.txt")
 
     temperature = 0.1
 
