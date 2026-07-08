@@ -1,7 +1,7 @@
 from GLOBAL import _rng
 from general_solver import Solver, _save_conflict_plot
 from samplers import metropolis_sampler
-from lifted import choice
+# from lifted import choice
 class LiftSolver(Solver):
     def __init__(self, g1, q, beta = 1.0, n_seconds=None):
         super().__init__(g1, q, beta, n_seconds)
@@ -34,7 +34,16 @@ class LiftSolver(Solver):
             proposed_new_color = (node.color + node.direction) % self.q
 
             # use sampler to get new color
-            new_color = choice(self.g, node_i, self.beta, self.q, proposed_new_color)
+
+            new_color = metropolis_sampler(self.g1, node_i, self.beta, self.q, proposed_new_color)
+
+            # If did not make the switch
+            if node.color == new_color:
+                node.direction *= -1
+
+            # If we made the switch
+            else:
+                node.color = new_color
 
             node.color = new_color
 
@@ -63,7 +72,7 @@ class LiftSolver(Solver):
                 time_list,
                 n_conflicts_list,
                 'Conflicts vs Time',
-                "stats/metropolis_solver.png",
+                "stats/lifted_solver.png",
             )
 
         return self.g1

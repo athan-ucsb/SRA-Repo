@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from graph_colorer import Graph
-
+from lifted_solver import LiftSolver
 from metropolis_solver import MetropolisSolver
 from gibbs_solver import GibbsSolver
 from random_solver import RandomSolver
@@ -123,10 +123,12 @@ def main():
     random_solver = RandomSolver(graph, q, beta, run_time)
     metropolis_solver = MetropolisSolver(graph, q, beta, run_time)
     gibbs_solver = GibbsSolver(graph, q, beta, run_time)
+    lifted_solver = LiftSolver(graph, q, beta, run_time)
 
     random_solver.solve()
     metropolis_solver.solve()
     gibbs_solver.solve()
+    lifted_solver.solve()
 
 
 if __name__ == "__main__":
