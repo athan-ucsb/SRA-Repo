@@ -43,7 +43,7 @@ def gibbs_sampler(g, node_i, q, beta):
     return sample
         
 
-# returns new color and the change in conflicts
+# returns new color
 def metropolis_sampler(g, node_i, beta, q, new_color = None):
     nd = g.nodes[node_i]
 
