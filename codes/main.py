@@ -114,11 +114,11 @@ def parse_args():
 
 
 def main():
-    graph = Graph().from_file("graphs/graph3.txt")
+    graph = Graph().from_file("graphs/graph2.txt")
 
     temperature = 0.1
 
-    q = 3
+    q = 5
     beta = 1 / temperature
     run_time = 3.0
 
