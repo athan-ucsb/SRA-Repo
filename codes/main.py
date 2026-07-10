@@ -1,6 +1,6 @@
 import argparse
 import time
-
+from benchmarks import *
 import numpy as np
 
 from graph_colorer import Graph
@@ -118,20 +118,34 @@ def main():
 
     temperature = 0.1
 
-    q = 5
-    beta = 1 / temperature
-    run_time = 3.0
+    q = 3
+    run_time = 0.1
 
-    random_solver = RandomSolver(graph, q, beta, run_time)
-    metropolis_solver = MetropolisSolver(graph, q, beta, run_time)
-    gibbs_solver = GibbsSolver(graph, q, beta, run_time)
-    lifted_solver = LiftSolver(graph, q, beta, run_time)
+    models = [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver]
 
-    random_solver.solve()
-    metropolis_solver.solve()
-    gibbs_solver.solve()
-    lifted_solver.solve()
+    get_models_outputs(graph, models, n = 100, time_limit=run_time, q = q, temperature = temperature)
 
+def get_stats_from_output():
+    output_paths = [
+        "stats/runs/<class 'random_solver.RandomSolver'>.npy",
+        "stats/runs/<class 'metropolis_solver.MetropolisSolver'>.npy", 
+        "stats/runs/<class 'gibbs_solver.GibbsSolver'>.npy", 
+        "stats/runs/<class 'lifted_solver.LiftSolver'>.npy", 
+    ]
+
+    for fp in output_paths:
+        outputs = np.load(fp)
+
+        draw_histogram(fp)
+        mean = get_mean(outputs)
+        var = get_variance(outputs)
+
+        print(f"{fp}: mean {mean}   var {var}")
 
 if __name__ == "__main__":
-    main()
+    graph = Graph().from_file("graphs/graph2.txt")
+
+    # main()
+    # get_stats_from_output()
+    # brute_force_energies(graph, 5)
+    # main()

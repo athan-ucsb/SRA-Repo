@@ -16,7 +16,8 @@ class RandomSolver(Solver):
 
         while not solved:
             if self.n_seconds is not None and self.profiler.get_elapsed_time() > self.n_seconds:
-                print("Time limit reached.")
+                if self.print_info:
+                    print("Time limit reached.")
                 break
 
             for node in self.g1.nodes:
@@ -25,7 +26,9 @@ class RandomSolver(Solver):
 
             if new_conflicts < best_conflicts:
                 best_conflicts = new_conflicts
-                print("Best conflicts: ", best_conflicts)
+
+                if self.print_info:
+                    print("Best conflicts: ", best_conflicts)
 
             # only check every 1000 iterations
             if self.profiler.past_interval():  # Update the second count
