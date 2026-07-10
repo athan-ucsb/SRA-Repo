@@ -10,16 +10,15 @@ def get_models_outputs(graph, models, n = 100, time_limit = 1, q = 3, temperatur
     for ModelType in models:
         n_conflicts = np.zeros(n)
 
+        model = ModelType(graph, q, beta, time_limit)
         for it_i in tqdm(range(n), desc = str(ModelType)):
             graph.reset(q)
-            model = ModelType(graph, q, beta, time_limit)
-            
             solved = model.solve()
 
             n_conflicts[it_i] = solved.count_conflicts()
 
 
-        np.save(f'stats/runs/{str(ModelType)}.npy', n_conflicts)
+        np.save(f'stats/runs/{model.name}.npy', n_conflicts)
 
 def basic_bench(graph, models, run_time, q, temperature):
     beta = 1 / temperature
@@ -55,17 +54,55 @@ def brute_force_energy_distribution(g, q):
     combinations = list(product(range(q), repeat=g.n_nodes))
     # n nodes and n colors
     energies = np.zeros(q ** g.n_nodes)
-    
-    for i, c in enumerate(combinations):
+
+    for i, c in tqdm(enumerate(combinations), desc = "Brute force energy distribution"):
         for j, node in enumerate(g.nodes):
             node.color = c[j]
         energies[i] = g.count_conflicts()
+
+    total_energy = np.sum(energies)
+
+    energies /= total_energy
+    
     return energies
 
-def get_model_energy_distribution(g, q, solver, it_count = 10000):
+def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 10000):
     energies = np.zeros(q ** g.n_nodes)
-    
-    
+    beta = 1 / temperature
 
+    model = SolverType(g, q, beta, 0)
+
+    for _ in tqdm(range(it_count), desc=f"Generating {model.name} energy distribution"):
+        model.solve_single()
+
+        c = tuple(node.color for node in g.nodes)
+
+        index = sum(c[i] * (q ** i) for i in range(g.n_nodes))
+
+        energies[index] += 1
+
+    total_energy = np.sum(energies)
+    energies /= total_energy
 
     return energies
+
+def get_kl_divergence(p, q):
+    # Avoid division by zero and log of zero by adding a small epsilon
+    epsilon = 1e-10
+    p = np.clip(p, epsilon, 1)
+    q = np.clip(q, epsilon, 1)
+
+    kl_div = np.sum(p * np.log(p / q))
+    return kl_div
+
+def benchmark_kl_divergence(graph, models, it_count, q, temperature):
+    brute_force_distribution = brute_force_energy_distribution(graph, q)
+
+    kl_divergences = {}
+
+    for ModelType in models:
+        model_distribution = get_model_energy_distribution(graph, q, ModelType, temperature, it_count)
+        kl_div = get_kl_divergence(brute_force_distribution, model_distribution)
+        kl_divergences[ModelType.__name__] = kl_div
+
+    return kl_divergences

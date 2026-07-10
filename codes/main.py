@@ -123,14 +123,14 @@ def main():
 
     models = [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver]
 
-    get_models_outputs(graph, models, n = 100, time_limit=run_time, q = q, temperature = temperature)
+    get_models_outputs(graph, models, n = 1000, time_limit=run_time, q = q, temperature = temperature)
 
 def get_stats_from_output():
     output_paths = [
-        "stats/runs/<class 'random_solver.RandomSolver'>.npy",
-        "stats/runs/<class 'metropolis_solver.MetropolisSolver'>.npy", 
-        "stats/runs/<class 'gibbs_solver.GibbsSolver'>.npy", 
-        "stats/runs/<class 'lifted_solver.LiftSolver'>.npy", 
+        "stats/runs/random.npy",
+        "stats/runs/metropolis.npy", 
+        "stats/runs/gibbs.npy", 
+        "stats/runs/lifted.npy", 
     ]
 
     for fp in output_paths:
@@ -143,7 +143,10 @@ def get_stats_from_output():
         print(f"{fp}: mean {mean}   var {var}")
 
 if __name__ == "__main__":
-    graph = Graph().from_file("graphs/graph2.txt")
+    graph = Graph().from_file("graphs/graph1.txt")
+
+    brute_force_energies = benchmark_kl_divergence(graph, [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver], it_count = 100000, q = 5, temperature = 1.0)
+    print("Brute force energies:", brute_force_energies)
 
     # main()
     # get_stats_from_output()
