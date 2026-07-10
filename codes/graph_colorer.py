@@ -33,6 +33,11 @@ class Graph:
                 self.edges[node2_id].append(node1_id)
 
         return self
+    
+    def reset(self, q):
+        for node in self.nodes:
+            node.color = _rng.integers(q)
+            node.direction = _rng.choice([-1, 1])
 
     def count_conflicts_i(self, node_id):
         conflicts = 0
