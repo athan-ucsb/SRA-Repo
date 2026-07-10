@@ -1,13 +1,6 @@
 from random import random
 import numpy as np
 from GLOBAL import _rng
-
-class Node:
-    def __init__(self, random_col = None):
-        self.color = random_col
-        self.direction = _rng.choice([-1, 1])
-
-
 class Graph:
     def __init__(self):
         self.nodes = []
