@@ -1,155 +1,40 @@
-import argparse
-import time
-from benchmarks import *
-import numpy as np
-
+"""Entry point: build a small graph and produce the two benchmark figures
+(convergence + energy-distribution-vs-exact-Boltzmann) for all four samplers."""
 from Graph import Graph
-from lifted_solver import LiftSolver
-from metropolis_solver import MetropolisSolver
-from gibbs_solver import GibbsSolver
 from random_solver import RandomSolver
+from codes.Metropolis import MetropolisSolver
+from codes.Gibbs import GibbsSolver
+from codes.Lifted import LiftSolver
+from benchmarks import compare_convergence, compare_distributions
+
+SOLVERS = [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver]
 
 
-_rng = np.random.default_rng()
-
-
-def initialize_random_colors(graph, q):
-    for node in range(graph.num_nodes):
-        graph.set_color(node, int(_rng.integers(0, q)))
-
-
-def metropolis_acceptance(beta, energy_delta):
-    if energy_delta <= 0:
-        return 1.0
-    return float(np.exp(-beta * energy_delta))
-
-
-def estimate_iat(trace, burn_in_fraction=0.1):
-    values = np.asarray(trace, dtype=float)
-    if values.size < 4:
-        return np.nan, 0, np.nan
-
-    burn_in = int(values.size * burn_in_fraction)
-    values = values[burn_in:]
-    n = values.size
-    centered = values - values.mean()
-    variance = np.dot(centered, centered) / n
-
-    if variance == 0:
-        return np.inf, n, 0.0
-
-    autocov = np.correlate(centered, centered, mode="full")[n - 1:] / np.arange(n, 0, -1)
-    autocorr = autocov / variance
-
-    positive_lags = []
-    for rho in autocorr[1:]:
-        if rho <= 0:
-            break
-        positive_lags.append(rho)
-
-    tau_int = 0.5 + float(np.sum(positive_lags))
-    ess = n / (2.0 * tau_int)
-    return tau_int, n, ess
-
-
-def run_random_recoloring(graph_path, q, beta, n_seconds):
-    graph = Graph.from_file(graph_path, q)
-    initialize_random_colors(graph, q)
-    solver = RandomSolver(graph, q, beta=beta, n_seconds=n_seconds)
-    solver.save_plot = False
-
-    trace = []
-    start = time.perf_counter()
-    while time.perf_counter() - start < n_seconds:
-        for node in range(graph.num_nodes):
-            graph.set_color(node, int(_rng.integers(0, q)))
-        trace.append(graph.count_conflicts())
-
-    wall_time = time.perf_counter() - start
-    return trace, wall_time, graph.count_conflicts()
-
-def benchmark_model(name, runner, graph_path, q, beta, n_seconds, refresh_rate):
-    if name == "LiftedChromaticPotts":
-        trace, wall_time, final_conflicts = runner(graph_path, q, beta, n_seconds, refresh_rate)
-    else:
-        trace, wall_time, final_conflicts = runner(graph_path, q, beta, n_seconds)
-
-    tau_int, samples, ess = estimate_iat(trace)
-    ess_per_second = ess / wall_time if wall_time > 0 else np.nan
-
-    return {
-        "name": name,
-        "samples": samples,
-        "wall_time": wall_time,
-        "iat": tau_int,
-        "ess": ess,
-        "ess_per_second": ess_per_second,
-        "final_conflicts": final_conflicts,
-    }
-
-
-def print_results(results):
-    print()
-    print("model                    samples  seconds       IAT    ESS/sec  final_conflicts")
-    print("----------------------  --------  -------  --------  ---------  ---------------")
-    for result in results:
-        print(
-            f"{result['name']:<22}"
-            f"{result['samples']:>8d}"
-            f"{result['wall_time']:>9.2f}"
-            f"{result['iat']:>10.3g}"
-            f"{result['ess_per_second']:>11.2f}"
-            f"{result['final_conflicts']:>17d}"
-        )
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Benchmark graph coloring samplers by IAT and ESS/sec.")
-    parser.add_argument("--graph", default="graphs/graph5.txt", help="Graph file to benchmark.")
-    parser.add_argument("--q", type=int, default=3, help="Number of Potts colors.")
-    parser.add_argument("--beta", type=float, default=10.0, help="Inverse temperature.")
-    parser.add_argument("--seconds", type=float, default=3.0, help="Seconds per sampler.")
-    parser.add_argument("--refresh-rate", type=float, default=0.05, help="Lifted direction refresh rate.")
-    return parser.parse_args()
-
-
-def main():
+def main(seed=0):
     q = 3
-    graph = Graph(num_nodes=20, num_colors=q, edge_probability=0.3)
+    beta = 1.0
 
-    temperature = 0.1
+    # convergence: bigger, near-3-colorable graph so there's a visible descent
+    def make_conv_graph():
+        return Graph(num_nodes=60, num_colors=q, edge_probability=0.08)
 
-    run_time = 0.1
+    # distribution: small + sparse so the exact Boltzmann P(E) is brute-forceable
+    def make_small_graph():
+        return Graph(num_nodes=8, num_colors=q, edge_probability=0.5)
 
-    models = [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver]
+    conv_path = compare_convergence(
+        SOLVERS, make_conv_graph, q=q, beta=beta, n_steps=30_000, seed=seed
+    )
+    print("convergence figure ->", conv_path)
 
-    get_models_outputs(graph, models, n = 1000, time_limit=run_time, q = q, temperature = temperature)
+    dist_path, kls = compare_distributions(
+        SOLVERS, make_small_graph, q=q, beta=beta, n_steps=150_000, seed=seed
+    )
+    print("distribution figure ->", dist_path)
+    print("KL(exact || empirical) per solver (lower = closer to the true distribution):")
+    for name, kl in kls.items():
+        print(f"  {name:12s} {kl:.4f}")
 
-def get_stats_from_output():
-    output_paths = [
-        "stats/runs/random.npy",
-        "stats/runs/metropolis.npy", 
-        "stats/runs/gibbs.npy", 
-        "stats/runs/lifted.npy", 
-    ]
-
-    for fp in output_paths:
-        outputs = np.load(fp)
-
-        draw_histogram(fp)
-        mean = get_mean(outputs)
-        var = get_variance(outputs)
-
-        print(f"{fp}: mean {mean}   var {var}")
 
 if __name__ == "__main__":
-    graph = Graph(num_nodes=5, num_colors=5, edge_probability=0.5)
-    graph.draw()
-
-    brute_force_energies = benchmark_kl_divergence(graph, [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver], it_count = 100000, q = 5, temperature = 1)
-    print("Brute force energies:", brute_force_energies)
-
-    # main()
-    # get_stats_from_output()
-    # brute_force_energies(graph, 5)
-    # main()
+    main()
