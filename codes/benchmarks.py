@@ -50,7 +50,8 @@ def get_variance(arr):
     return var
 
 
-def brute_force_energy_distribution(g, q):
+def brute_force_energy_distribution(g, q, temperature):
+    beta = 1 / temperature
     combinations = list(product(range(q), repeat=g.num_nodes))
     # n nodes and n colors
     energies = np.zeros(q ** g.num_nodes)
@@ -58,7 +59,14 @@ def brute_force_energy_distribution(g, q):
     for i, c in tqdm(enumerate(combinations), desc = "Brute force energy distribution"):
         for j in range(g.num_nodes):
             g.set_color(j, c[j])
-        energies[i] = g.count_conflicts()
+
+        index = sum(c[j] * (q ** j) for j in range(g.num_nodes))
+        
+        conflicts = g.count_conflicts()
+
+        energy = np.exp(-conflicts * beta)
+
+        energies[index] = energy
 
     total_energy = np.sum(energies)
 
@@ -96,7 +104,7 @@ def get_kl_divergence(p, q):
     return kl_div
 
 def benchmark_kl_divergence(graph, models, it_count, q, temperature):
-    brute_force_distribution = brute_force_energy_distribution(graph, q)
+    brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
 
     kl_divergences = {}
 
