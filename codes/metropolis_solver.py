@@ -9,15 +9,14 @@ class MetropolisSolver(Solver):
 
     def solve_single(self):
          # choose random node
-        node_i = _rng.integers(0, self.g1.n_nodes)
+        node_i = _rng.integers(0, self.g1.num_nodes)
 
         old_local_conflicts = self.g1.count_conflicts_i(node_i)
 
         # use sampler to get new color
         new_color = metropolis_sampler(self.g1, node_i, self.beta, self.q)
 
-        node = self.g1.nodes[node_i]
-        node.color = new_color
+        self.g1.set_color(node_i, new_color)
 
         new_local_conflicts = self.g1.count_conflicts_i(node_i)
 
