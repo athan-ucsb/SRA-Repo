@@ -1,5 +1,5 @@
 from GLOBAL import _rng
-from general_solver import Solver
+from Solver import Solver
 
 import numpy as np
 

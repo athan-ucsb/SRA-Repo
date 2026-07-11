@@ -1,7 +1,7 @@
-from codes.Metropolis import MetropolisSolver
+from Metropolis import MetropolisSolver
 
 
-class LiftSolver(MetropolisSolver):
+class LiftedSolver(MetropolisSolver):
     def __init__(self, graph, q, beta, n_seconds=None):
         super().__init__(graph, q, beta, n_seconds)
         self.name = "lifted"
