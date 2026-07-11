@@ -51,13 +51,13 @@ def get_variance(arr):
 
 
 def brute_force_energy_distribution(g, q):
-    combinations = list(product(range(q), repeat=g.n_nodes))
+    combinations = list(product(range(q), repeat=g.num_nodes))
     # n nodes and n colors
-    energies = np.zeros(q ** g.n_nodes)
+    energies = np.zeros(q ** g.num_nodes)
 
     for i, c in tqdm(enumerate(combinations), desc = "Brute force energy distribution"):
-        for j, node in enumerate(g.nodes):
-            node.color = c[j]
+        for j in range(g.num_nodes):
+            g.set_color(j, c[j])
         energies[i] = g.count_conflicts()
 
     total_energy = np.sum(energies)
@@ -67,7 +67,7 @@ def brute_force_energy_distribution(g, q):
     return energies
 
 def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 10000):
-    energies = np.zeros(q ** g.n_nodes)
+    energies = np.zeros(q ** g.num_nodes)
     beta = 1 / temperature
 
     model = SolverType(g, q, beta, 0)
@@ -75,9 +75,9 @@ def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 1000
     for _ in tqdm(range(it_count), desc=f"Generating {model.name} energy distribution"):
         model.solve_single()
 
-        c = tuple(node.color for node in g.nodes)
+        c = tuple(g.get_color(i) for i in range(g.num_nodes))
 
-        index = sum(c[i] * (q ** i) for i in range(g.n_nodes))
+        index = sum(c[i] * (q ** i) for i in range(g.num_nodes))
 
         energies[index] += 1
 

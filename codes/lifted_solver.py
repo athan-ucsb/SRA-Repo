@@ -10,24 +10,25 @@ class LiftSolver(Solver):
     # returns change in conflicts
     def solve_single(self):
         # choose random node
-        node_i = _rng.integers(0, self.g1.n_nodes)
+        node_i = _rng.integers(0, self.g1.num_nodes)
 
         old_local_conflicts = self.g1.count_conflicts_i(node_i)
 
-        node = self.g1.nodes[node_i]
+        color = self.g1.get_color(node_i)
+        direction = self.g1.get_direction(node_i)
 
-        proposed_new_color = (node.color + node.direction) % self.q
+        proposed_new_color = (color + direction) % self.q
 
         # use sampler to get new color
         new_color = metropolis_sampler(self.g1, node_i, self.beta, self.q, proposed_new_color)
 
         # If did not make the switch
-        if node.color == new_color:
-            node.direction *= -1
+        if color == new_color:
+            self.g1.flip_direction(node_i)
 
         # If we made the switch
         else:
-            node.color = new_color
+            self.g1.set_color(node_i, new_color)
 
         new_local_conflicts = self.g1.count_conflicts_i(node_i)
 

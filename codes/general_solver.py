@@ -18,7 +18,7 @@ class Solver:
     
     def solve(self):
         solved = False
-        best_conflicts = self.g1.n_nodes * self.g1.n_nodes
+        best_conflicts = self.g1.num_nodes * self.g1.num_nodes
 
         old_conflicts = self.g1.count_conflicts()
         self.profiler.start()
