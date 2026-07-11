@@ -145,7 +145,7 @@ def get_stats_from_output():
 if __name__ == "__main__":
     graph = Graph(num_nodes=5, num_colors=5, edge_probability=0.5)
 
-    brute_force_energies = benchmark_kl_divergence(graph, [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver], it_count = 100000, q = 5, temperature = 1.0)
+    brute_force_energies = benchmark_kl_divergence(graph, [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver], it_count = 100000, q = 5, temperature = 1)
     print("Brute force energies:", brute_force_energies)
 
     # main()

@@ -49,22 +49,36 @@ def get_variance(arr):
 
     return var
 
+def coloring_to_index(colors, q):
+    """Match the ordering poduced by itertools.product."""
+    index = 0
+    for color in colors:
+        index = index * q + color
+    return index
+
+def brute_force_energy_distribution(g, q, temperature):
+    beta = 1 / temperature
 
 def brute_force_energy_distribution(g, q):
     combinations = list(product(range(q), repeat=g.num_nodes))
     # n nodes and n colors
     energies = np.zeros(q ** g.num_nodes)
 
-    for i, c in tqdm(enumerate(combinations), desc = "Brute force energy distribution"):
-        for j in range(g.num_nodes):
-            g.set_color(j, c[j])
-        energies[i] = g.count_conflicts()
+    for c in tqdm(combinations, desc = "Brute force energy distribution"):
+        for j, node in enumerate(g.nodes):
+            node.color = c[j]
+
+        energy = g.count_conflicts()
+        index = coloring_to_index(c, q)
+
+        energies[index] = np.exp(-beta * energy)
 
     total_energy = np.sum(energies)
 
     energies /= total_energy
     
     return energies
+
 
 def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 10000):
     energies = np.zeros(q ** g.num_nodes)
@@ -77,7 +91,7 @@ def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 1000
 
         c = tuple(g.get_color(i) for i in range(g.num_nodes))
 
-        index = sum(c[i] * (q ** i) for i in range(g.num_nodes))
+        index = coloring_to_index(c, q)
 
         energies[index] += 1
 
@@ -95,12 +109,14 @@ def get_kl_divergence(p, q):
     kl_div = np.sum(p * np.log(p / q))
     return kl_div
 
+
 def benchmark_kl_divergence(graph, models, it_count, q, temperature):
-    brute_force_distribution = brute_force_energy_distribution(graph, q)
+    brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
 
     kl_divergences = {}
 
     for ModelType in models:
+        graph.reset(q)
         model_distribution = get_model_energy_distribution(graph, q, ModelType, temperature, it_count)
         kl_div = get_kl_divergence(brute_force_distribution, model_distribution)
         kl_divergences[ModelType.__name__] = kl_div
