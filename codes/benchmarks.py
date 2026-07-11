@@ -49,6 +49,15 @@ def get_variance(arr):
 
     return var
 
+def coloring_to_index(colors, q):
+    """Match the ordering poduced by itertools.product."""
+    index = 0
+    for color in colors:
+        index = index * q + color
+    return index
+
+def brute_force_energy_distribution(g, q, temperature):
+    beta = 1 / temperature
 
 def brute_force_energy_distribution(g, q, temperature):
     beta = 1 / temperature
@@ -74,6 +83,7 @@ def brute_force_energy_distribution(g, q, temperature):
     
     return energies
 
+
 def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 10000):
     energies = np.zeros(q ** g.num_nodes)
     beta = 1 / temperature
@@ -85,7 +95,7 @@ def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 1000
 
         c = tuple(g.get_color(i) for i in range(g.num_nodes))
 
-        index = sum(c[i] * (q ** i) for i in range(g.num_nodes))
+        index = coloring_to_index(c, q)
 
         energies[index] += 1
 
@@ -103,12 +113,15 @@ def get_kl_divergence(p, q):
     kl_div = np.sum(p * np.log(p / q))
     return kl_div
 
+
 def benchmark_kl_divergence(graph, models, it_count, q, temperature):
+    brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
     brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
 
     kl_divergences = {}
 
     for ModelType in models:
+        graph.reset(q)
         model_distribution = get_model_energy_distribution(graph, q, ModelType, temperature, it_count)
         kl_div = get_kl_divergence(brute_force_distribution, model_distribution)
         kl_divergences[ModelType.__name__] = kl_div
