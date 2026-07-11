@@ -69,7 +69,7 @@ def brute_force_energy_distribution(g, q, temperature):
         for j in range(g.num_nodes):
             g.set_color(j, c[j])
 
-        index = sum(c[j] * (q ** j) for j in range(g.num_nodes))
+        index = coloring_to_index(c, q)
         
         conflicts = g.count_conflicts()
 
@@ -115,7 +115,6 @@ def get_kl_divergence(p, q):
 
 
 def benchmark_kl_divergence(graph, models, it_count, q, temperature):
-    brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
     brute_force_distribution = brute_force_energy_distribution(graph, q, temperature)
 
     kl_divergences = {}
