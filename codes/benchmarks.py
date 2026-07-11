@@ -59,9 +59,10 @@ def coloring_to_index(colors, q):
 def brute_force_energy_distribution(g, q, temperature):
     beta = 1 / temperature
 
-    combinations = list(product(range(q), repeat=g.n_nodes))
+def brute_force_energy_distribution(g, q):
+    combinations = list(product(range(q), repeat=g.num_nodes))
     # n nodes and n colors
-    energies = np.zeros(q ** g.n_nodes)
+    energies = np.zeros(q ** g.num_nodes)
 
     for c in tqdm(combinations, desc = "Brute force energy distribution"):
         for j, node in enumerate(g.nodes):
@@ -80,7 +81,7 @@ def brute_force_energy_distribution(g, q, temperature):
 
 
 def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 10000):
-    energies = np.zeros(q ** g.n_nodes)
+    energies = np.zeros(q ** g.num_nodes)
     beta = 1 / temperature
 
     model = SolverType(g, q, beta, 0)
@@ -88,7 +89,7 @@ def get_model_energy_distribution(g, q, SolverType, temperature, it_count = 1000
     for _ in tqdm(range(it_count), desc=f"Generating {model.name} energy distribution"):
         model.solve_single()
 
-        c = tuple(node.color for node in g.nodes)
+        c = tuple(g.get_color(i) for i in range(g.num_nodes))
 
         index = coloring_to_index(c, q)
 

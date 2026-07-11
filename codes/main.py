@@ -3,7 +3,7 @@ import time
 from benchmarks import *
 import numpy as np
 
-from graph_colorer import Graph
+from Graph import Graph
 from lifted_solver import LiftSolver
 from metropolis_solver import MetropolisSolver
 from gibbs_solver import GibbsSolver
@@ -14,8 +14,8 @@ _rng = np.random.default_rng()
 
 
 def initialize_random_colors(graph, q):
-    for node in graph.nodes:
-        node.color = int(_rng.integers(0, q))
+    for node in range(graph.num_nodes):
+        graph.set_color(node, int(_rng.integers(0, q)))
 
 
 def metropolis_acceptance(beta, energy_delta):
@@ -53,7 +53,7 @@ def estimate_iat(trace, burn_in_fraction=0.1):
 
 
 def run_random_recoloring(graph_path, q, beta, n_seconds):
-    graph = Graph().from_file(graph_path)
+    graph = Graph.from_file(graph_path, q)
     initialize_random_colors(graph, q)
     solver = RandomSolver(graph, q, beta=beta, n_seconds=n_seconds)
     solver.save_plot = False
@@ -61,8 +61,8 @@ def run_random_recoloring(graph_path, q, beta, n_seconds):
     trace = []
     start = time.perf_counter()
     while time.perf_counter() - start < n_seconds:
-        for node in graph.nodes:
-            node.color = int(_rng.integers(0, q))
+        for node in range(graph.num_nodes):
+            graph.set_color(node, int(_rng.integers(0, q)))
         trace.append(graph.count_conflicts())
 
     wall_time = time.perf_counter() - start
@@ -114,11 +114,11 @@ def parse_args():
 
 
 def main():
-    graph = Graph().from_file("graphs/graph2.txt")
+    q = 3
+    graph = Graph(num_nodes=20, num_colors=q, edge_probability=0.3)
 
     temperature = 0.1
 
-    q = 3
     run_time = 0.1
 
     models = [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver]
@@ -143,7 +143,7 @@ def get_stats_from_output():
         print(f"{fp}: mean {mean}   var {var}")
 
 if __name__ == "__main__":
-    graph = Graph().from_file("graphs/graph1.txt")
+    graph = Graph(num_nodes=5, num_colors=5, edge_probability=0.5)
 
     brute_force_energies = benchmark_kl_divergence(graph, [RandomSolver, MetropolisSolver, GibbsSolver, LiftSolver], it_count = 100000, q = 5, temperature = 1)
     print("Brute force energies:", brute_force_energies)

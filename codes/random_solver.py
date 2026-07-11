@@ -7,12 +7,11 @@ class RandomSolver(Solver):
         self.name = "random"
 
     def solve_single(self):
-        node_i = _rng.integers(0, self.g1.n_nodes)
-        node = self.g1.nodes[node_i]
+        node_i = _rng.integers(0, self.g1.num_nodes)
 
         old_local_conflicts = self.g1.count_conflicts_i(node_i)
-        
-        node.color = _rng.integers(0, self.q)
+
+        self.g1.set_color(node_i, _rng.integers(0, self.q))
 
         new_local_conflicts = self.g1.count_conflicts_i(node_i)
 
