@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import networkx as nx
-from random import choice, randrange
+
+from GLOBAL import _rng
 
 
 class Graph:
-    def __init__(self, num_nodes=None, num_colors=3, edge_probability=1, graph=None):
+    def __init__(self, num_nodes, num_colors, edge_probability=0.5, graph=None):
         if graph is None:
             graph = nx.erdos_renyi_graph(n=num_nodes, p=edge_probability)
 
@@ -17,7 +18,7 @@ class Graph:
         self.reset(num_colors)
 
     @classmethod
-    def from_file(cls, filename, num_colors=3):
+    def from_file(cls, filename, num_colors):
         declared_nodes = 0
         edges = []
 
@@ -28,9 +29,12 @@ class Graph:
                     continue
 
                 if parts[0] == "p":
-                    declared_nodes = int(parts[1])
+                    declared_nodes = int(parts[1] if parts[1].isdigit() else parts[2])
                 elif parts[0] == "e":
                     edges.append((int(parts[1]), int(parts[2])))
+
+        if edges and min(min(u, v) for u, v in edges) >= 1:
+            edges = [(u - 1, v - 1) for u, v in edges]
 
         num_nodes = declared_nodes
         for u, v in edges:
@@ -40,23 +44,20 @@ class Graph:
         graph.add_nodes_from(range(num_nodes))
         graph.add_edges_from(edges)
 
-        return cls(num_colors=num_colors, graph=graph)
+        return cls(num_nodes=num_nodes, num_colors=num_colors, graph=graph)
 
     def reset(self, q):
         self.num_colors = q
         self.color_pool = [cm.tab20(i / q) for i in range(q)]
 
         for node in self.G.nodes():
-            self.G.nodes[node]["state_color"] = randrange(q)
-            self.G.nodes[node]["direction"] = choice([-1, 1])
+            self.G.nodes[node]["state_color"] = int(_rng.integers(q))
+            self.G.nodes[node]["direction"] = int(_rng.choice([-1, 1]))
 
         self.energy = self.count_conflicts()
 
     def get_color(self, node):
         return self.G.nodes[node]["state_color"]
-
-    def set_color(self, node, color):
-        self.G.nodes[node]["state_color"] = color
 
     def get_direction(self, node):
         return self.G.nodes[node]["direction"]
@@ -73,9 +74,6 @@ class Graph:
 
         return conflicts
 
-    def count_conflicts_i(self, node):
-        return self.local_energy_for_color(node, self.G.nodes[node]["state_color"])
-
     def energy_delta(self, node, old_color, new_color):
         old_conflicts = self.local_energy_for_color(node, old_color)
         new_conflicts = self.local_energy_for_color(node, new_color)
@@ -90,16 +88,20 @@ class Graph:
 
         return conflicts
 
-    def change_color(self, node, new_color):
-        old_color = self.G.nodes[node]["state_color"]
-        delta = self.energy_delta(node, old_color, new_color)
+    def change_color(self, node, new_color, delta=None):
+        if delta is None:
+            old_color = self.G.nodes[node]["state_color"]
+            delta = self.energy_delta(node, old_color, new_color)
         self.G.nodes[node]["state_color"] = new_color
         self.energy += delta
 
-    def random_sample_node(self):
-        node_idx = randrange(0, self.num_nodes)
+        return delta
 
-        return self.G.nodes[node_idx]
+    def random_sample_node(self):
+        return int(_rng.integers(self.num_nodes))
+    
+    def set_color(self, node, color):
+        self.G.nodes[node]["state_color"] = color
 
     def draw(self):
         node_colors = [self.color_pool[self.G.nodes[n]["state_color"]] for n in self.G.nodes()]

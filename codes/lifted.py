@@ -1,17 +1,22 @@
-from samplers import metropolis_sampler
+from Metropolis import MetropolisSolver
 
-# def choice(graph, node_i, q, current_candidate, beta):
-#     # Call metropolis sampler and store in variable
-#     new_color = metropolis_sampler(graph, node, beta, q, current_candidate)
 
-#     # If did not make the switch
-#     if node.color == new_color:
-#         node.direction *= -1
+class LiftedSolver(MetropolisSolver):
+    def __init__(self, graph, q, beta, n_seconds=None):
+        super().__init__(graph, q, beta, n_seconds)
+        self.name = "lifted"
 
-    
-#     # If we made the switch
-#     else:
-#         node.color = new_color
+    def solve_single(self):
+        node = self.graph.random_sample_node()
+        color = self.graph.get_color(node)
+        direction = self.graph.get_direction(node)
+        proposed = (color + direction) % self.q
 
-#     return node.color
-    
+        new_color, delta = self.metropolis_sampler(node, proposed)
+
+        if new_color == color:
+            self.graph.flip_direction(node)
+        else:
+            self.graph.change_color(node, new_color, delta)
+
+        return delta
