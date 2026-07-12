@@ -14,7 +14,7 @@ class GibbsSolver(Solver):
         min_conflicts  = np.inf
 
         for color in range(self.q):
-            conflict_per_node = self.g.local_energy_for_color(node, color)
+            conflict_per_node = self.graph.local_energy_for_color(node, color)
             conflicts[color] = conflict_per_node
             min_conflicts = min(min_conflicts, conflict_per_node)
 
