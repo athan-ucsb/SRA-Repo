@@ -44,6 +44,7 @@ def plot_energy_distribution(data, out_path=None):
         ax.set_xlabel("energy E (conflicts)")
         ax.legend(fontsize=8)
     axes[0].set_ylabel("P(E)")
+
     fig.suptitle("Energy distribution vs exact Boltzmann  "
                  f"(q={meta.get('q')}, beta={meta.get('beta')}, "
                  f"n={meta.get('n')}, m={meta.get('m')})")
@@ -52,6 +53,7 @@ def plot_energy_distribution(data, out_path=None):
     path = _out(out_path, "energy_distribution.png")
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+
     return path
 
 
@@ -65,7 +67,7 @@ def plot_residual_energy(data, out_path=None):
         # drop step 0
         plt.plot(steps[1:], residual[1:], lw=2, color=_color(name), label=name)
     plt.xscale("log") # descent is front-loaded (first few hundred steps); log reveals it
-    plt.yscale("log") # relaxation is ~exponential -> different rates become separable slopes
+    plt.yscale("log") # relaxation is exponential -> different rates become separable slopes
     plt.ylim(bottom=0.1) # hide the averaged equilibrium noise floor
     # focus on the descent (the only place the valid samplers differ); the long
     # equilibrium tail is just fluctuation noise where they must overlap
@@ -79,6 +81,7 @@ def plot_residual_energy(data, out_path=None):
     path = _out(out_path, "residual_energy.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
+
     return path
 
 
@@ -129,5 +132,5 @@ def plot_ess(data, metric="ess_per_second", out_path=None):
     path = _out(out_path, "ess.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    
+
     return path

@@ -13,12 +13,14 @@ def sample_energy_trace(solver, n_steps, thin=1):
         solver.solve_single()
         if step % thin == 0:
             trace.append(g.energy)
+
     return np.array(trace)
 
 
 def _fresh_solver(SolverType, graph, q, beta, seed):
     GLOBAL.seed_all(seed)
     graph.reset(q)
+
     return SolverType(graph, q=q, beta=beta, n_seconds=None)
 
 
@@ -30,6 +32,7 @@ def density_of_states(graph, q):
         for node, c in enumerate(coloring):
             graph.set_color(node, c)
         g_E[graph.count_conflicts()] += 1
+
     return g_E
 
 
@@ -37,6 +40,7 @@ def boltzmann_energy_distribution(graph, q, beta):
     g_E = density_of_states(graph, q)
     energies = np.arange(g_E.size)
     weights = g_E * np.exp(-beta * energies)
+
     return weights / weights.sum()
 
 
@@ -49,6 +53,7 @@ def kl_divergence(p, q):
     eps = 1e-12
     p = np.clip(p, eps, 1)
     q = np.clip(q, eps, 1)
+
     return float(np.sum(p * np.log(p / q)))
 
 
@@ -93,6 +98,7 @@ def relaxation_data(solver_types, make_graph, q, beta, n_steps, n_restarts=15, t
 
     ground = min(mt.min() for mt in mean_traces.values())
     residual = {name: mt - ground for name, mt in mean_traces.items()}
+
     return {"steps": steps, "per_solver": residual, "ground": float(ground)}
 
 
@@ -121,6 +127,7 @@ def estimate_iat(trace, burn_in_fraction=0.1):
 
     tau_int = 0.5 + float(np.sum(positive_lags))
     ess = n / (2.0 * tau_int)
+    
     return tau_int, n, ess
 
 
@@ -141,11 +148,13 @@ def autocorrelation_function(trace, max_lag=None, burn_in_fraction=0.1):
     autocorr = autocov / variance
     if max_lag is not None:
         autocorr = autocorr[:max_lag + 1]
+
     return autocorr
 
 
-def mixing_data(solver_types, make_graph, q, beta, n_steps, seed=0, max_lag=200):
+def mixing_data(solver_types, make_graph, q, beta, n_steps, seed=0, max_lag=300):
     per_solver = {}
+
     for SolverType in solver_types:
         GLOBAL.seed_all(seed)
         graph = make_graph()
@@ -168,4 +177,5 @@ def mixing_data(solver_types, make_graph, q, beta, n_steps, seed=0, max_lag=200)
             "ess_per_second": ess / wall if wall > 0 else np.nan,
             "wall_time": wall,
         }
+
     return {"per_solver": per_solver, "meta": {"q": q, "beta": beta, "n_steps": n_steps}}
