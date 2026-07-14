@@ -6,6 +6,7 @@ from Random import RandomSolver
 from Metropolis import MetropolisSolver
 from Gibbs import GibbsSolver
 from Lifted import LiftedSolver
+from Annealing import AnnealedLifted, AnnealedGibbs, AnnealedMetropolis
 
 
 def visualize_working(solver, n_steps=200, delay=0.3):
@@ -41,7 +42,7 @@ def main(show_working=True):
 
     graph = Graph(num_nodes=10, num_colors=q, edge_probability=0.5)
 
-    solver = LiftedSolver(graph, q=q, beta=beta)
+    solver = GibbsSolver(graph, q=q, beta=beta)
 
     if show_working:
         visualize_working(solver, n_steps=200, delay=0.3)

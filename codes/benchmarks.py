@@ -4,6 +4,7 @@ from itertools import product
 import numpy as np
 
 import GLOBAL
+from Annealing import AnnealingMixin
 
 
 def sample_energy_trace(solver, n_steps, thin=1):
@@ -57,28 +58,40 @@ def kl_divergence(p, q):
     return float(np.sum(p * np.log(p / q)))
 
 
-def correctness_data(solver_types, make_graph, q, beta, n_steps, burn_in=0.2, seed=0):
+def correctness_data(solver_types, make_graph, q, beta, n_steps, burn_in=0.2, n_trials=1000, seed=0):
     GLOBAL.seed_all(seed)
-    ref_graph = make_graph()
-    m = ref_graph.G.number_of_edges()
-    exact = boltzmann_energy_distribution(ref_graph, q, beta)
+    graph = make_graph()
+    m = graph.G.number_of_edges()
+    exact = boltzmann_energy_distribution(graph, q, beta)
     energies = np.arange(m + 1)
 
     per_solver = {}
     for SolverType in solver_types:
-        GLOBAL.seed_all(seed)
-        graph = make_graph()
-        solver = SolverType(graph, q=q, beta=beta, n_seconds=None)
-        trace = sample_energy_trace(solver, n_steps)
-        trace = trace[int(burn_in * trace.size):]
-        emp = empirical_energy_distribution(trace, m)
-        per_solver[solver.name] = {"empirical": emp, "kl": kl_divergence(exact, emp)}
+        name = None
+        pooled = []
+        per_trial_kl = []
+        for t in range(n_trials):
+            solver = _fresh_solver(SolverType, graph, q, beta, seed + t)
+            name = solver.name
+            trace = sample_energy_trace(solver, n_steps)
+            trace = trace[int(burn_in * trace.size):]
+            pooled.append(trace)
+            per_trial_kl.append(kl_divergence(exact, empirical_energy_distribution(trace, m)))
 
-    return {"energies": energies, "exact": exact, "per_solver": per_solver, "meta": {"q": q, "beta": beta, "n": ref_graph.num_nodes, "m": m}}
+        emp = empirical_energy_distribution(np.concatenate(pooled), m)
+        per_solver[name] = {
+            "empirical": emp,
+            "kl": kl_divergence(exact, emp),
+            "kl_mean": float(np.mean(per_trial_kl)),
+            "kl_std": float(np.std(per_trial_kl)),
+        }
+
+    return {"energies": energies, "exact": exact, "per_solver": per_solver,
+            "meta": {"q": q, "beta": beta, "n": graph.num_nodes, "m": m, "n_trials": n_trials}}
 
 
 
-def relaxation_data(solver_types, make_graph, q, beta, n_steps, n_restarts=15, thin=50, seed=0):
+def relaxation_data(solver_types, make_graph, q, beta, n_steps, n_restarts=1000, thin=50, seed=0):
     GLOBAL.seed_all(seed)
     graph = make_graph()
     n_records = len(range(0, n_steps, thin))
@@ -100,6 +113,58 @@ def relaxation_data(solver_types, make_graph, q, beta, n_steps, n_restarts=15, t
     residual = {name: mt - ground for name, mt in mean_traces.items()}
 
     return {"steps": steps, "per_solver": residual, "ground": float(ground)}
+
+
+def tts_data(solver_types, make_graph, q, beta, n_steps, n_trials=1000, target=0.99, seed=0, beta_hot=0.3):
+    per_solver = {}
+
+    for SolverType in solver_types:
+        GLOBAL.seed_all(seed)
+        graph = make_graph()
+        start_beta = beta_hot if issubclass(SolverType, AnnealingMixin) else beta
+
+        n_solved = 0
+        solve_steps = []
+        total_time = 0.0
+        total_steps = 0
+
+        for t in range(n_trials):
+            solver = _fresh_solver(SolverType, graph, q, start_beta, seed + t)
+            g = solver.graph
+            t0 = time.perf_counter()
+            for step in range(1, n_steps + 1):
+                solver.solve_single()
+                if g.energy == 0:
+                    n_solved += 1
+                    solve_steps.append(step)
+                    break
+            total_time += time.perf_counter() - t0
+            total_steps += step
+        name = solver.name
+
+        sec_per_step = total_time / total_steps if total_steps else np.nan
+
+        p = n_solved / n_trials
+        if p <= 0.0:
+            repeats, tts = np.inf, np.inf
+        elif p >= 1.0:
+            repeats, tts = 1.0, float(np.median(solve_steps))
+        else:
+            repeats = np.log(1 - target) / np.log(1 - p)
+            tts = n_steps * repeats
+
+        per_solver[name] = {
+            "p_success": p,
+            "repeats_for_target": repeats,
+            "tts_steps": tts,
+            "tts_seconds": tts * sec_per_step,
+            "sec_per_step": sec_per_step,
+            "median_solve_step": float(np.median(solve_steps)) if solve_steps else np.nan,
+        }
+
+    return {"per_solver": per_solver,
+            "meta": {"q": q, "beta": beta, "n_steps": n_steps,
+                     "n_trials": n_trials, "target": target}}
 
 
 def estimate_iat(trace, burn_in_fraction=0.1):
@@ -152,30 +217,45 @@ def autocorrelation_function(trace, max_lag=None, burn_in_fraction=0.1):
     return autocorr
 
 
-def mixing_data(solver_types, make_graph, q, beta, n_steps, seed=0, max_lag=300):
+def mixing_data(solver_types, make_graph, q, beta, n_steps, n_trials=1000, seed=0, max_lag=300):
     per_solver = {}
 
+    GLOBAL.seed_all(seed)
+    graph = make_graph()
+    n_nodes = graph.num_nodes
+
     for SolverType in solver_types:
-        GLOBAL.seed_all(seed)
-        graph = make_graph()
-        n_nodes = graph.num_nodes
-        solver = SolverType(graph, q=q, beta=beta, n_seconds=None)
+        name = None
+        taus, acfs = [], []
+        total_ess, total_wall = 0.0, 0.0
+        for t in range(n_trials):
+            solver = _fresh_solver(SolverType, graph, q, beta, seed + t)
+            name = solver.name
 
-        t0 = time.perf_counter()
-        trace = sample_energy_trace(solver, n_steps)
-        wall = time.perf_counter() - t0
+            t0 = time.perf_counter()
+            trace = sample_energy_trace(solver, n_steps)
+            wall = time.perf_counter() - t0
 
-        tau, _, ess = estimate_iat(trace)
-        acf = autocorrelation_function(trace, max_lag=max_lag)
-        sweeps = n_steps / n_nodes
+            tau, _, ess = estimate_iat(trace)
+            acf = autocorrelation_function(trace, max_lag=max_lag)
 
-        per_solver[solver.name] = {
-            "acf": acf,
-            "tau": tau,
-            "ess": ess,
-            "ess_per_sweep": ess / sweeps if sweeps > 0 else np.nan,
-            "ess_per_second": ess / wall if wall > 0 else np.nan,
-            "wall_time": wall,
+            taus.append(tau)
+            acfs.append(acf)
+            total_ess += ess
+            total_wall += wall
+
+        min_len = min(a.size for a in acfs)
+        mean_acf = np.mean([a[:min_len] for a in acfs], axis=0)
+        total_sweeps = n_trials * n_steps / n_nodes
+
+        per_solver[name] = {
+            "acf": mean_acf,
+            "tau": float(np.nanmean(taus)),
+            "ess": total_ess,
+            "ess_per_sweep": total_ess / total_sweeps if total_sweeps > 0 else np.nan,
+            "ess_per_second": total_ess / total_wall if total_wall > 0 else np.nan,
+            "wall_time": total_wall,
         }
 
-    return {"per_solver": per_solver, "meta": {"q": q, "beta": beta, "n_steps": n_steps}}
+    return {"per_solver": per_solver,
+            "meta": {"q": q, "beta": beta, "n_steps": n_steps, "n_trials": n_trials}}

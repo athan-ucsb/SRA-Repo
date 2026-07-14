@@ -1,5 +1,5 @@
 
-from profiler import Profiler
+from Profiler import Profiler
 
 
 class Solver:

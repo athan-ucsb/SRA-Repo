@@ -8,21 +8,31 @@ import matplotlib.pyplot as plt
 STATS_DIR = os.path.join(os.path.dirname(__file__), "stats")
 os.makedirs(STATS_DIR, exist_ok=True)
 
-_ORDER = ["random", "metropolis", "gibbs", "lifted"]
-_CMAP = plt.get_cmap("tab10")
+_STYLE = {
+    "random":              {"color": "#1f77b4", "ls": "-"},
+    "metropolis":          {"color": "#ff7f0e", "ls": "-"},
+    "gibbs":               {"color": "#2ca02c", "ls": "-"},
+    "lifted":              {"color": "#d62728", "ls": "-"},
+    "annealed_metropolis": {"color": "#9467bd", "ls": "--"},
+    "annealed_gibbs":      {"color": "#17becf", "ls": "--"},
+    "annealed_lifted":     {"color": "#e377c2", "ls": "--"},
+}
+_FALLBACK = {"color": "#7f7f7f", "ls": ":"}
 
 
 def _color(name):
-    if name in _ORDER:
-        return _CMAP(_ORDER.index(name))
-    return _CMAP(len(_ORDER) % 10)
+    return _STYLE.get(name, _FALLBACK)["color"]
+
+
+def _ls(name):
+    return _STYLE.get(name, _FALLBACK)["ls"]
 
 
 def _out(out_path, default):
     return out_path or os.path.join(STATS_DIR, default)
 
 
-# Correctness: empirical histogram vs exact Boltzmann P(E)
+# Correctness
 def plot_energy_distribution(data, out_path=None):
     energies = data["energies"]
     exact = data["exact"]
@@ -57,24 +67,32 @@ def plot_energy_distribution(data, out_path=None):
     return path
 
 
-# Convergence: residual energy vs steps
+# Convergence
 def plot_residual_energy(data, out_path=None):
     steps = data["steps"]
     per_solver = data["per_solver"]
+    ground = data.get("ground", 0.0)
+
+    curves = {name: np.asarray(res, dtype=float) + ground
+              for name, res in per_solver.items()}
 
     plt.figure(figsize=(9, 5))
-    for name, residual in per_solver.items():
-        # drop step 0
-        plt.plot(steps[1:], residual[1:], lw=2, color=_color(name), label=name)
-    plt.xscale("log") # descent is front-loaded (first few hundred steps); log reveals it
-    plt.yscale("log") # relaxation is exponential -> different rates become separable slopes
-    plt.ylim(bottom=0.1) # hide the averaged equilibrium noise floor
-    # focus on the descent (the only place the valid samplers differ); the long
-    # equilibrium tail is just fluctuation noise where they must overlap
-    plt.xlim(steps[1], min(1500, steps[-1]))
-    plt.xlabel("single-site update (log scale)")
-    plt.ylabel("residual energy above equilibrium (log scale)")
-    plt.title("Residual energy vs updates (averaged over restarts)")
+    for name, energy in curves.items():
+        plt.plot(steps[1:], energy[1:], lw=2, color=_color(name),
+                 ls=_ls(name), label=name)
+
+    plt.xscale("log")
+    plt.yscale("log")
+
+    all_pos = np.concatenate([e[1:] for e in curves.values()])
+    all_pos = all_pos[all_pos > 0]
+    if all_pos.size:
+        plt.ylim(max(0.3, all_pos.min() * 0.7), all_pos.max() * 1.3)
+    plt.xlim(steps[1], steps[-1])
+
+    plt.xlabel("Monte Carlo steps (log scale)")
+    plt.ylabel("mean energy / conflicts (log scale)")
+    plt.title("Mean energy vs Monte Carlo steps (averaged over restarts)")
     plt.legend()
     plt.grid(alpha=0.3, which="both")
 
@@ -85,7 +103,7 @@ def plot_residual_energy(data, out_path=None):
     return path
 
 
-# Mixing: autocorrelation decay + ESS bars (the lifting headline)
+# Mixing
 def plot_autocorrelation(data, out_path=None):
     per_solver = data["per_solver"]
 
@@ -93,10 +111,11 @@ def plot_autocorrelation(data, out_path=None):
     for name, d in per_solver.items():
         acf = d["acf"]
         lags = np.arange(acf.size)
-        plt.plot(lags, acf, lw=2, color=_color(name), label=f"{name} (tau={d['tau']:.1f})")
-        
+        plt.plot(lags, acf, lw=2, color=_color(name), ls=_ls(name),
+                 label=f"{name} (tau={d['tau']:.1f})")
+
     plt.axhline(0, color="gray", lw=0.8)
-    plt.xlabel("lag (steps)")
+    plt.xlabel("lag (Monte Carlo steps)")
     plt.ylabel("energy autocorrelation")
     plt.title("Autocorrelation decay — faster decay = faster mixing")
     plt.legend()
@@ -130,6 +149,52 @@ def plot_ess(data, metric="ess_per_second", out_path=None):
     plt.title(title)
 
     path = _out(out_path, "ess.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    return path
+
+
+_TTS_LABELS = {
+    "tts_steps": ("Steps", "Monte Carlo steps", "tts_steps.png"),
+    "tts_seconds": ("Time", "seconds", "tts_time.png"),
+}
+
+
+def plot_tts(data, metric="tts_steps", out_path=None):
+    per_solver = data["per_solver"]
+    meta = data["meta"]
+    names = list(per_solver.keys())
+    x = np.arange(len(names))
+    kind, unit, default = _TTS_LABELS[metric]
+
+    vals = [per_solver[n][metric] for n in names]
+    plot_vals = [v if np.isfinite(v) else np.nan for v in vals]
+
+    plt.figure(figsize=(9, 5))
+    plt.bar(x, plot_vals, color=[_color(n) for n in names])
+    plt.yscale("log")
+
+    finite = [v for v in plot_vals if v == v]
+    floor = min(finite) * 0.5 if finite else 1.0
+    for xi, name in zip(x, names):
+        v = per_solver[name][metric]
+        p = per_solver[name]["p_success"]
+        if np.isfinite(v):
+            plt.text(xi, v, f"p={p:.2f}", ha="center", va="bottom", fontsize=8)
+        else:
+            plt.text(xi, floor, "never\nsolved", ha="center", va="bottom",
+                     fontsize=8, color="gray")
+
+    target = int(meta.get("target", 0.99) * 100)
+    plt.xticks(x, names, rotation=20)
+    plt.ylabel(f"TTS to {target}% success ({unit}, log scale)")
+    plt.title(f"{kind} to solution — lower = solves faster  "
+              f"({meta.get('n_trials')} trials, "
+              f"budget {meta.get('n_steps')} MC steps)")
+    plt.grid(alpha=0.3, axis="y", which="both")
+
+    path = _out(out_path, default)
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
 
