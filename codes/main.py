@@ -39,9 +39,9 @@ def main(show_working=True):
     q = 4
     beta = 1.0
 
-    graph = Graph(num_nodes=6, num_colors=q, edge_probability=0.5)
+    graph = Graph(num_nodes=10, num_colors=q, edge_probability=0.5)
 
-    solver = GibbsSolver(graph, q=q, beta=beta)
+    solver = LiftedSolver(graph, q=q, beta=beta)
 
     if show_working:
         visualize_working(solver, n_steps=200, delay=0.3)
