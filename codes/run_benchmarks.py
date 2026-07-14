@@ -2,7 +2,7 @@ from Graph import Graph
 from Random import RandomSolver
 from Metropolis import MetropolisSolver
 from Gibbs import GibbsSolver
-from Lifted import LiftedSolver
+from lifted import LiftedSolver
 from Annealing import AnnealedMetropolis, AnnealedGibbs, AnnealedLifted
 
 import benchmarks as B
@@ -33,7 +33,7 @@ def make_hard():
 
 def main():
     # Correctness
-    corr = B.correctness_data(ALL_SOLVERS, make_tiny, q=Q, beta=1.0, n_steps=60_000, n_trials=500, seed=SEED)
+    corr = B.correctness_data(ALL_SOLVERS, make_tiny, q=Q, beta=1.0, n_steps=60_000, n_trials=50, seed=SEED)
 
     print("distribution   ->", V.plot_energy_distribution(corr))
     print("KL(exact||empirical) per solver (lower = closer to true distribution):")

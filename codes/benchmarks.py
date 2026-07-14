@@ -1,6 +1,6 @@
 import time
 from itertools import product
-
+from tqdm import tqdm
 import numpy as np
 
 import GLOBAL
@@ -70,7 +70,7 @@ def correctness_data(solver_types, make_graph, q, beta, n_steps, burn_in=0.2, n_
         name = None
         pooled = []
         per_trial_kl = []
-        for t in range(n_trials):
+        for t in tqdm(range(n_trials), desc = SolverType.__name__):
             solver = _fresh_solver(SolverType, graph, q, beta, seed + t)
             name = solver.name
             trace = sample_energy_trace(solver, n_steps)

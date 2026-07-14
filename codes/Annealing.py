@@ -1,6 +1,6 @@
 from Metropolis import MetropolisSolver
 from Gibbs import GibbsSolver
-from Lifted import LiftedSolver
+from lifted import LiftedSolver
 
 
 class AnnealingMixin:
