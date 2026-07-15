@@ -199,3 +199,148 @@ def plot_tts(data, metric="tts_steps", out_path=None):
     plt.close()
 
     return path
+
+
+def save_tts_vs_q_data(data, out_path=None):
+    """Save all TTS-versus-q metrics in a NumPy .npz archive."""
+    arrays = {"q_values": np.asarray(data["q_values"])}
+    for name, metrics in data["per_solver"].items():
+        for metric, values in metrics.items():
+            arrays[f"{name}__{metric}"] = np.asarray(values)
+    for key, value in data.get("meta", {}).items():
+        arrays[f"meta__{key}"] = np.asarray(value)
+
+    path = _out(out_path, "tts_vs_q.npz")
+    np.savez(path, **arrays)
+    return path
+
+
+def load_tts_vs_q_data(data_path):
+    """Load a TTS-versus-q NumPy archive into the plotting data format."""
+    with np.load(data_path, allow_pickle=False) as archive:
+        data = {
+            "q_values": archive["q_values"],
+            "per_solver": {},
+            "meta": {},
+        }
+        for key in archive.files:
+            if key == "q_values":
+                continue
+            if key.startswith("meta__"):
+                data["meta"][key.removeprefix("meta__")] = archive[key].item()
+                continue
+            name, metric = key.split("__", maxsplit=1)
+            data["per_solver"].setdefault(name, {})[metric] = archive[key]
+    return data
+
+
+def plot_tts_vs_q(data, out_path=None, q_step=3, max_panels=3):
+    """Plot sampled q values as separate bar charts with independent axes."""
+    q_values = np.asarray(data["q_values"])
+    per_solver = data["per_solver"]
+    meta = data.get("meta", {})
+    selected_indices = np.flatnonzero(q_values % q_step == 0)[:max_panels]
+    selected = q_values[selected_indices]
+    if selected.size == 0:
+        raise ValueError(f"no q values are divisible by {q_step}")
+
+    names = list(per_solver)
+    colors = [_color(name) for name in names]
+    fig, axes = plt.subplots(
+        1,
+        selected.size,
+        figsize=(4.2 * selected.size, 5.2),
+        squeeze=False,
+    )
+    axes = axes[0]
+    legend_handles = None
+
+    for ax, q, q_index in zip(axes, selected, selected_indices):
+        values = np.asarray([
+            per_solver[name]["tts_steps"][q_index] for name in names
+        ], dtype=float)
+        plot_values = np.where(np.isfinite(values), values, np.nan)
+        bars = ax.bar(np.arange(len(names)), plot_values, color=colors)
+        if legend_handles is None:
+            legend_handles = bars
+
+        finite = plot_values[np.isfinite(plot_values)]
+        if finite.size:
+            ax.set_ylim(0, finite.max() * 1.18)
+
+        labels = [
+            f"{value / 1_000_000:.2f}M" if value >= 1_000_000
+            else f"{value:,.0f}"
+            for value in plot_values
+        ]
+        ax.bar_label(bars, labels=labels, padding=3, fontsize=9)
+        ax.set_xticks([])
+        ax.set_xlabel(f"q={q}", fontsize=12)
+        ax.set_ylabel("TTS steps")
+        ax.grid(alpha=0.3, axis="y")
+
+    target = int(meta.get("target", 0.99) * 100)
+    fig.suptitle(
+        f"TTS to {target}% success  "
+        f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)",
+        y=0.99,
+    )
+    fig.legend(legend_handles, names, loc="upper center",
+               bbox_to_anchor=(0.5, 0.93), ncol=len(names))
+    fig.tight_layout(rect=(0, 0, 1, 0.85))
+
+    path = _out(out_path, "tts_vs_q.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    return path
+
+
+def plot_tts_vs_q_log(data, out_path=None):
+    """Plot the original all-q TTS line chart with a logarithmic y-axis."""
+    q_values = np.asarray(data["q_values"])
+    per_solver = data["per_solver"]
+    meta = data.get("meta", {})
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    has_finite_value = False
+    for name, metrics in per_solver.items():
+        values = np.asarray(metrics["tts_steps"], dtype=float)
+        finite_values = np.where(np.isfinite(values), values, np.nan)
+        has_finite_value |= bool(np.any(finite_values > 0))
+        ax.plot(q_values, finite_values, marker="o", lw=2,
+                color=_color(name), ls=_ls(name), label=name)
+
+    if has_finite_value:
+        ax.set_yscale("log")
+    target = int(meta.get("target", 0.99) * 100)
+    ax.set_xticks(q_values)
+    ax.set_xlabel("Number of colors (q)")
+    ax.set_ylabel(f"TTS to {target}% success (Monte Carlo steps, log scale)")
+    ax.set_title("Time to solution vs number of colors  "
+                 f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)")
+    ax.legend()
+    ax.grid(alpha=0.3, which="both")
+
+    path = _out(out_path, "tts_vs_q_log.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    return path
+
+
+def plot_tts_vs_q_file(data_path, out_path=None):
+    """Create sampled independent-axis bar charts from a NumPy archive."""
+    return plot_tts_vs_q(load_tts_vs_q_data(data_path), out_path=out_path)
+
+
+def plot_tts_vs_q_log_file(data_path, out_path=None):
+    """Create the original logarithmic TTS PNG from a NumPy archive."""
+    return plot_tts_vs_q_log(load_tts_vs_q_data(data_path), out_path=out_path)
+
+def main():
+    # plot_tts(load_tts_vs_q_data("stats/tts_vs_q.npz"))
+    plot_tts_vs_q_file("stats/tts_vs_q.npz")
+
+if __name__ == "__main__":
+    main()
