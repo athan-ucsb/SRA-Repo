@@ -8,7 +8,9 @@ from GLOBAL import _rng
 class Graph:
     def __init__(self, num_nodes, num_colors, edge_probability=0.5, graph=None):
         if graph is None:
-            graph = nx.erdos_renyi_graph(n=num_nodes, p=edge_probability)
+            graph = self.generate_solvable_graph(
+                num_nodes, num_colors, edge_probability
+            )
 
         self.G = graph
         self.num_nodes = graph.number_of_nodes()
@@ -16,6 +18,50 @@ class Graph:
         self.color_pool = [cm.tab20(i / num_colors) for i in range(num_colors)]
 
         self.reset(num_colors)
+
+    @staticmethod
+    def generate_solvable_graph(num_nodes, num_colors, edge_probability=0.5):
+        """Create a q-colorable graph using a planted, balanced q-coloring.
+
+        Edges are only placed between nodes with different planted colors, so
+        ``planted_coloring`` is always a valid solution.  The conditional edge
+        probability is adjusted to keep the overall density close to
+        ``edge_probability``; it is capped when that density is impossible for
+        a q-colorable graph.
+        """
+        if num_nodes < 0:
+            raise ValueError("num_nodes must be non-negative")
+        if num_colors <= 0:
+            raise ValueError("num_colors must be positive")
+        if not 0.0 <= edge_probability <= 1.0:
+            raise ValueError("edge_probability must be between 0 and 1")
+
+        graph = nx.Graph()
+        graph.add_nodes_from(range(num_nodes))
+
+        planted_colors = [node % num_colors for node in range(num_nodes)]
+        _rng.shuffle(planted_colors)
+
+        total_pairs = num_nodes * (num_nodes - 1) // 2
+        color_counts = [planted_colors.count(color) for color in range(num_colors)]
+        same_color_pairs = sum(count * (count - 1) // 2 for count in color_counts)
+        compatible_pairs = total_pairs - same_color_pairs
+        compatible_probability = (
+            min(edge_probability * total_pairs / compatible_pairs, 1.0)
+            if compatible_pairs
+            else 0.0
+        )
+
+        for source in range(num_nodes):
+            for target in range(source + 1, num_nodes):
+                if (planted_colors[source] != planted_colors[target]
+                        and _rng.random() < compatible_probability):
+                    graph.add_edge(source, target)
+
+        graph.graph["planted_coloring"] = {
+            node: color for node, color in enumerate(planted_colors)
+        }
+        return graph
 
     @classmethod
     def from_file(cls, filename, num_colors):
@@ -117,4 +163,4 @@ class Graph:
         )
 
         plt.title(f"Random Graph ({self.num_nodes} Nodes)", fontsize=14)
-        plt.show()
+        plt.savefig(f"graphs/images/graph{_rng.integers(0, 100)}.png")
