@@ -1,11 +1,14 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import networkx as nx
+from pathlib import Path
 
 from GLOBAL import _rng
 
 
 class Graph:
+    _draw_count = 0
+
     def __init__(self, num_nodes, num_colors, edge_probability=0.5, graph=None):
         if graph is None:
             graph = self.generate_solvable_graph(
@@ -93,6 +96,9 @@ class Graph:
         return cls(num_nodes=num_nodes, num_colors=num_colors, graph=graph)
 
     def reset(self, q):
+        if q <= 0:
+            raise ValueError("q must be positive")
+
         self.num_colors = q
         self.color_pool = [cm.tab20(i / q) for i in range(q)]
 
@@ -145,11 +151,11 @@ class Graph:
 
     def random_sample_node(self):
         return int(_rng.integers(self.num_nodes))
-    
-    def set_color(self, node, color):
-        self.G.nodes[node]["state_color"] = color
 
-    def draw(self):
+    def set_color(self, node, color):
+        return self.change_color(node, color)
+
+    def draw(self, out_path=None):
         node_colors = [self.color_pool[self.G.nodes[n]["state_color"]] for n in self.G.nodes()]
 
         plt.figure(figsize=(8, 6))
@@ -163,4 +169,14 @@ class Graph:
         )
 
         plt.title(f"Random Graph ({self.num_nodes} Nodes)", fontsize=14)
-        plt.savefig(f"graphs/images/graph{_rng.integers(0, 100)}.png")
+        if out_path is None:
+            Graph._draw_count += 1
+            out_path = (Path(__file__).resolve().parent / "graphs" / "images"
+                        / f"graph{Graph._draw_count}.png")
+        else:
+            out_path = Path(out_path)
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path)
+        plt.close()
+        return str(out_path)

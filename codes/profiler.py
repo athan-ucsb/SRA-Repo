@@ -8,6 +8,7 @@ class Profiler:
 
     def start(self):
         self.start_time = time.time()
+        self.interval_count = 0
 
     def get_elapsed_time(self):
         if self.start_time is None:
