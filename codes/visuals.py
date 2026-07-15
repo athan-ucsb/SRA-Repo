@@ -35,7 +35,6 @@ def _out(out_path, default):
 # Correctness
 def plot_energy_distribution(data, out_path=None):
     energies = data["energies"]
-    exact = data["exact"]
     per_solver = data["per_solver"]
     meta = data.get("meta", {})
 
@@ -48,14 +47,14 @@ def plot_energy_distribution(data, out_path=None):
     for ax, name in zip(axes, names):
         emp = per_solver[name]["empirical"]
         kl = per_solver[name]["kl"]
-        ax.bar(energies, emp, width=0.85, alpha=0.55, color=_color(name), label="sampler")
-        ax.plot(energies, exact, "o-", color="black", ms=4, label="exact P(E)")
+        ax.bar(energies, emp, width=0.85, alpha=0.7, color=_color(name),
+               label="empirical sampler")
         ax.set_title(f"{name}\nKL(exact||emp)={kl:.4f}")
         ax.set_xlabel("energy E (conflicts)")
         ax.legend(fontsize=8)
     axes[0].set_ylabel("P(E)")
 
-    fig.suptitle("Energy distribution vs exact Boltzmann  "
+    fig.suptitle("Empirical energy distributions  "
                  f"(q={meta.get('q')}, beta={meta.get('beta')}, "
                  f"n={meta.get('n')}, m={meta.get('m')})")
     fig.tight_layout()
@@ -64,6 +63,29 @@ def plot_energy_distribution(data, out_path=None):
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
+    return path
+
+
+def plot_exact_energy_distribution(data, out_path=None):
+    """Plot the exact Boltzmann distribution over conflict energies."""
+    energies = np.asarray(data["energies"])
+    exact = np.asarray(data["exact"], dtype=float)
+    meta = data.get("meta", {})
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.bar(energies, exact, width=0.85, color="#4c78a8", alpha=0.8,
+           label="exact Boltzmann P(E)")
+    ax.set_xlabel("energy E (conflicts)")
+    ax.set_ylabel("P(E)")
+    ax.set_title("Exact Boltzmann energy distribution  "
+                 f"(q={meta.get('q')}, beta={meta.get('beta')}, "
+                 f"n={meta.get('n')}, m={meta.get('m')})")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+
+    path = _out(out_path, "exact_energy_distribution.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return path
 
 
@@ -101,6 +123,154 @@ def plot_residual_energy(data, out_path=None):
     plt.close()
 
     return path
+
+
+def save_cost_trajectory_data(data, out_path=None):
+    """Save raw cost/time traces and benchmark metadata as a NumPy archive."""
+    arrays = {
+        "steps": np.asarray(data["steps"]),
+        "graph_indices": np.asarray(data["graph_indices"]),
+        "trial_indices": np.asarray(data["trial_indices"]),
+    }
+    for name, traces in data["per_solver"].items():
+        for metric, values in traces.items():
+            arrays[f"{name}__{metric}"] = np.asarray(values)
+    for key, value in data.get("meta", {}).items():
+        arrays[f"meta__{key}"] = np.asarray(value)
+
+    path = _out(out_path, "cost_trajectories.npz")
+    np.savez_compressed(path, **arrays)
+    return path
+
+
+def load_cost_trajectory_data(data_path):
+    """Load raw cost/time traces from a NumPy archive."""
+    with np.load(data_path, allow_pickle=False) as archive:
+        data = {
+            "steps": archive["steps"],
+            "graph_indices": archive["graph_indices"],
+            "trial_indices": archive["trial_indices"],
+            "per_solver": {},
+            "meta": {},
+        }
+        reserved = {"steps", "graph_indices", "trial_indices"}
+        for key in archive.files:
+            if key in reserved:
+                continue
+            if key.startswith("meta__"):
+                data["meta"][key.removeprefix("meta__")] = archive[key].item()
+                continue
+            name, metric = key.split("__", maxsplit=1)
+            data["per_solver"].setdefault(name, {})[metric] = archive[key]
+    return data
+
+
+def _mean_and_sem(values):
+    values = np.asarray(values, dtype=float)
+    mean = values.mean(axis=0)
+    if values.shape[0] < 2:
+        return mean, np.zeros_like(mean)
+    sem = values.std(axis=0, ddof=1) / np.sqrt(values.shape[0])
+    return mean, sem
+
+
+def _converging_prefix_length(mean_cost, patience=10):
+    """Return the prefix before a best-cost trajectory reaches a plateau."""
+    mean_cost = np.asarray(mean_cost, dtype=float)
+    if patience <= 0:
+        raise ValueError("patience must be positive")
+
+    last_improvement = 0
+    samples_without_improvement = 0
+    for index in range(1, mean_cost.size):
+        if mean_cost[index] < mean_cost[index - 1]:
+            last_improvement = index
+            samples_without_improvement = 0
+        else:
+            samples_without_improvement += 1
+            if samples_without_improvement >= patience:
+                return max(2, last_improvement + 1)
+
+    return mean_cost.size
+
+
+def _plot_cost_trajectory(data, x_metric, out_path):
+    steps = np.asarray(data["steps"])
+    per_solver = data["per_solver"]
+    meta = data.get("meta", {})
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for name, traces in per_solver.items():
+        mean_cost, sem_cost = _mean_and_sem(traces["costs"])
+        if x_metric == "steps":
+            x_values = steps
+        else:
+            x_values = np.asarray(traces["times"], dtype=float).mean(axis=0)
+
+        prefix_length = _converging_prefix_length(mean_cost)
+        x_values = x_values[:prefix_length]
+        mean_cost = mean_cost[:prefix_length]
+        sem_cost = sem_cost[:prefix_length]
+
+        ax.plot(x_values, mean_cost, lw=2, color=_color(name),
+                ls=_ls(name), label=name)
+        ax.fill_between(
+            x_values,
+            np.maximum(0.0, mean_cost - sem_cost),
+            mean_cost + sem_cost,
+            color=_color(name),
+            alpha=0.15,
+        )
+
+    if x_metric == "steps":
+        xlabel = "Steps"
+        title = "Lowest Energy Found vs Steps"
+        default = "cost_vs_steps.png"
+    else:
+        xlabel = "Time (seconds)"
+        title = "Lowest Energy Found vs Time"
+        default = "cost_vs_time.png"
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Lowest Energy Found")
+    ax.set_title(
+        f"{title}  "
+        f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)"
+    )
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    path = _out(out_path, default)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_cost_vs_steps(data, out_path=None):
+    return _plot_cost_trajectory(data, "steps", out_path)
+
+
+def plot_cost_vs_time(data, out_path=None):
+    return _plot_cost_trajectory(data, "time", out_path)
+
+
+def plot_cost_vs_steps_file(data_path, out_path=None):
+    data = load_cost_trajectory_data(data_path)
+    return plot_cost_vs_steps(data, out_path=out_path)
+
+
+def plot_cost_vs_time_file(data_path, out_path=None):
+    data = load_cost_trajectory_data(data_path)
+    return plot_cost_vs_time(data, out_path=out_path)
+
+
+def plot_cost_trajectory_file(data_path, steps_out=None, time_out=None):
+    """Render both cost plots from one saved NumPy archive."""
+    data = load_cost_trajectory_data(data_path)
+    return {
+        "steps": plot_cost_vs_steps(data, out_path=steps_out),
+        "time": plot_cost_vs_time(data, out_path=time_out),
+    }
 
 
 # Mixing
@@ -257,7 +427,7 @@ def plot_tts_vs_q(data, out_path=None, q_step=3, max_panels=3):
 
     for ax, q, q_index in zip(axes, selected, selected_indices):
         values = np.asarray([
-            per_solver[name]["tts_steps"][q_index] for name in names
+            per_solver[name]["tts_seconds"][q_index] for name in names
         ], dtype=float)
         plot_values = np.where(np.isfinite(values), values, np.nan)
         bars = ax.bar(np.arange(len(names)), plot_values, color=colors)
@@ -270,13 +440,13 @@ def plot_tts_vs_q(data, out_path=None, q_step=3, max_panels=3):
 
         labels = [
             f"{value / 1_000_000:.2f}M" if value >= 1_000_000
-            else f"{value:,.0f}"
+            else f"{value:,.3f}"
             for value in plot_values
         ]
         ax.bar_label(bars, labels=labels, padding=3, fontsize=9)
         ax.set_xticks([])
         ax.set_xlabel(f"q={q}", fontsize=12)
-        ax.set_ylabel("TTS steps")
+        ax.set_ylabel("TTS seconds")
         ax.grid(alpha=0.3, axis="y")
 
     target = int(meta.get("target", 0.99) * 100)
@@ -305,7 +475,7 @@ def plot_tts_vs_q_log(data, out_path=None):
     fig, ax = plt.subplots(figsize=(9, 5))
     has_finite_value = False
     for name, metrics in per_solver.items():
-        values = np.asarray(metrics["tts_steps"], dtype=float)
+        values = np.asarray(metrics["tts_seconds"], dtype=float)
         finite_values = np.where(np.isfinite(values), values, np.nan)
         has_finite_value |= bool(np.any(finite_values > 0))
         ax.plot(q_values, finite_values, marker="o", lw=2,
@@ -316,7 +486,7 @@ def plot_tts_vs_q_log(data, out_path=None):
     target = int(meta.get("target", 0.99) * 100)
     ax.set_xticks(q_values)
     ax.set_xlabel("Number of colors (q)")
-    ax.set_ylabel(f"TTS to {target}% success (Monte Carlo steps, log scale)")
+    ax.set_ylabel(f"TTS to {target}% success (seconds, log scale)")
     ax.set_title("Time to solution vs number of colors  "
                  f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)")
     ax.legend()
@@ -338,9 +508,16 @@ def plot_tts_vs_q_log_file(data_path, out_path=None):
     """Create the original logarithmic TTS PNG from a NumPy archive."""
     return plot_tts_vs_q_log(load_tts_vs_q_data(data_path), out_path=out_path)
 
+
 def main():
-    # plot_tts(load_tts_vs_q_data("stats/tts_vs_q.npz"))
-    plot_tts_vs_q_file("stats/tts_vs_q.npz")
+    data_path = os.path.join(STATS_DIR, "cost_trajectories.npz")
+    data = np.load(data_path)
+
+    plot_exact_energy_distribution(data)
+
+    # for kind, path in plot_cost_trajectory_file(data_path).items():
+    #     print(f"cost vs {kind} -> {path}")
+
 
 if __name__ == "__main__":
     main()

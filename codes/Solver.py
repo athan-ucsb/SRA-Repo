@@ -17,7 +17,7 @@ class Solver:
         return 0
     
     def solve(self):
-        solved = False
+        solved = self.graph.energy == 0
 
         best_conflicts = self.graph.energy
         self.profiler.start()

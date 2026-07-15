@@ -159,8 +159,94 @@ def relaxation_data(solver_types, graphs, q, beta, n_steps, n_restarts=1000, thi
             "meta": {"n_graphs": len(graphs), "n_restarts": n_restarts}}
 
 
+def cost_trajectory_data(solver_types, graphs, q, beta, n_steps,
+                         n_trials=10, thin=100, seed=0, beta_hot=0.3):
+    """Collect best-so-far conflict cost against steps and wall time.
+
+    One row is retained for every graph/trial run so callers can recompute
+    aggregate statistics from the saved data rather than relying only on a
+    precomputed mean.
+    """
+    graphs = _as_graphs(graphs)
+    if n_steps <= 0:
+        raise ValueError("n_steps must be positive")
+    if n_trials <= 0:
+        raise ValueError("n_trials must be positive")
+    if thin <= 0:
+        raise ValueError("thin must be positive")
+
+    steps = np.arange(0, n_steps + 1, thin, dtype=int)
+    if steps[-1] != n_steps:
+        steps = np.append(steps, n_steps)
+
+    n_runs = len(graphs) * n_trials
+    graph_indices = np.repeat(np.arange(len(graphs)), n_trials)
+    trial_indices = np.tile(np.arange(n_trials), len(graphs))
+    per_solver = {}
+
+    for SolverType in solver_types:
+        start_beta = beta_hot if issubclass(SolverType, AnnealingMixin) else beta
+        costs = np.empty((n_runs, steps.size), dtype=float)
+        times = np.empty((n_runs, steps.size), dtype=float)
+        name = None
+        run_index = 0
+
+        progress = tqdm(total=n_runs, desc=SolverType.__name__)
+        for graph_index, graph in enumerate(graphs):
+            for trial in range(n_trials):
+                trial_seed = seed + graph_index * n_trials + trial
+                solver = _fresh_solver(
+                    SolverType, graph, q, start_beta, trial_seed
+                )
+                name = solver.name
+                best_cost = float(graph.energy)
+                costs[run_index, 0] = best_cost
+                times[run_index, 0] = 0.0
+
+                started = time.perf_counter()
+                record_index = 1
+                for step in range(1, n_steps + 1):
+                    solver.solve_single()
+                    best_cost = min(best_cost, float(graph.energy))
+
+                    if record_index < steps.size and step == steps[record_index]:
+                        costs[run_index, record_index] = best_cost
+                        times[run_index, record_index] = time.perf_counter() - started
+                        record_index += 1
+
+                run_index += 1
+                progress.update(1)
+        progress.close()
+
+        per_solver[name] = {"costs": costs, "times": times}
+
+    return {
+        "steps": steps,
+        "graph_indices": graph_indices,
+        "trial_indices": trial_indices,
+        "per_solver": per_solver,
+        "meta": {
+            "q": q,
+            "beta": beta,
+            "n_steps": n_steps,
+            "thin": thin,
+            "n_trials": n_trials,
+            "n_graphs": len(graphs),
+            "n_runs": n_runs,
+            "cost_definition": "best_so_far_conflicts",
+        },
+    }
+
+
 def tts_data(solver_types, graphs, q, beta, n_steps, n_trials=1000, target=0.99, seed=0, beta_hot=0.3):
     graphs = _as_graphs(graphs)
+    if n_steps <= 0:
+        raise ValueError("n_steps must be positive")
+    if n_trials <= 0:
+        raise ValueError("n_trials must be positive")
+    if not 0.0 < target < 1.0:
+        raise ValueError("target must be between 0 and 1")
+
     per_solver = {}
 
     for SolverType in solver_types:
@@ -180,6 +266,11 @@ def tts_data(solver_types, graphs, q, beta, n_steps, n_trials=1000, target=0.99,
                 solver = _fresh_solver(SolverType, graph, q, start_beta, trial_seed)
                 name = solver.name
                 g = solver.graph
+                if g.energy == 0:
+                    n_solved += 1
+                    solve_steps.append(0)
+                    continue
+
                 t0 = time.perf_counter()
                 for step in range(1, n_steps + 1):
                     solver.solve_single()
@@ -200,7 +291,9 @@ def tts_data(solver_types, graphs, q, beta, n_steps, n_trials=1000, target=0.99,
 
         name = solver.name
         p = float(np.mean(graph_ps))
-        sec_per_step = float(np.nanmean(graph_sec_per_step))
+        finite_step_rates = [rate for rate in graph_sec_per_step
+                             if np.isfinite(rate)]
+        sec_per_step = float(np.mean(finite_step_rates)) if finite_step_rates else 0.0
 
         if p <= 0.0:
             repeats, tts = np.inf, np.inf
@@ -213,11 +306,12 @@ def tts_data(solver_types, graphs, q, beta, n_steps, n_trials=1000, target=0.99,
             repeats = np.log(1 - target) / np.log(1 - p)
             tts = n_steps * repeats
 
+        tts_seconds = 0.0 if tts == 0.0 else tts * sec_per_step
         per_solver[name] = {
             "p_success": p,
             "repeats_for_target": repeats,
             "tts_steps": tts,
-            "tts_seconds": tts * sec_per_step,
+            "tts_seconds": tts_seconds,
             "sec_per_step": sec_per_step,
             "median_solve_step": float(np.median(all_solve_steps)) if all_solve_steps else np.nan,
         }

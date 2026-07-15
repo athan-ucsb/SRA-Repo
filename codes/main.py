@@ -5,7 +5,7 @@ from Graph import Graph
 from Random import RandomSolver
 from Metropolis import MetropolisSolver
 from Gibbs import GibbsSolver
-from Lifted import LiftedSolver
+from lifted import LiftedSolver
 from Annealing import AnnealedLifted, AnnealedGibbs, AnnealedMetropolis
 
 
