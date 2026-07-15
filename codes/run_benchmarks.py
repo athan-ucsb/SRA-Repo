@@ -41,12 +41,12 @@ def main():
         print(f"    {name:12s} {d['kl']:.4f}")
 
     # Convergence
-    relax = B.relaxation_data(OPTIMIZERS, make_hard, q=Q, beta=1.0, n_steps=20_000, n_restarts=500, thin=100, seed=SEED)
+    relax = B.relaxation_data(OPTIMIZERS, make_hard, q=Q, beta=1.0, n_steps=20_000, n_restarts=50, thin=100, seed=SEED)
 
     print("residual energy->", V.plot_residual_energy(relax))
 
     # Mixing
-    mix = B.mixing_data(SAMPLERS, make_hard, q=Q, beta=1.0, n_steps=50_000, n_trials=500, seed=SEED)
+    mix = B.mixing_data(SAMPLERS, make_hard, q=Q, beta=1.0, n_steps=50_000, n_trials=50, seed=SEED)
 
     print("autocorrelation->", V.plot_autocorrelation(mix))
     print(" mixing summary (smaller tau = faster mixing):")
@@ -55,7 +55,7 @@ def main():
 
     # TTS
     tts = B.tts_data(SAMPLERS, make_hard, q=Q, beta=3.0,
-                     n_steps=300_000, n_trials=300, target=0.99, seed=SEED)
+                     n_steps=300_000, n_trials=50, target=0.99, seed=SEED)
 
     print("tts steps ->", V.plot_tts(tts, metric="tts_steps"))
     print("tts time  ->", V.plot_tts(tts, metric="tts_seconds"))

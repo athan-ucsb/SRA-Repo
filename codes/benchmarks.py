@@ -101,7 +101,7 @@ def relaxation_data(solver_types, make_graph, q, beta, n_steps, n_restarts=1000,
     for SolverType in solver_types:
         acc = np.zeros(n_records)
         name = None
-        for r in range(n_restarts):
+        for r in tqdm(range(n_restarts), desc=SolverType.__name__):
             solver = _fresh_solver(SolverType, graph, q, beta, seed + r)
             name = solver.name
             trace = sample_energy_trace(solver, n_steps, thin=thin)
@@ -128,7 +128,7 @@ def tts_data(solver_types, make_graph, q, beta, n_steps, n_trials=1000, target=0
         total_time = 0.0
         total_steps = 0
 
-        for t in range(n_trials):
+        for t in tqdm(range(n_trials), desc=SolverType.__name__):
             solver = _fresh_solver(SolverType, graph, q, start_beta, seed + t)
             g = solver.graph
             t0 = time.perf_counter()
@@ -228,7 +228,7 @@ def mixing_data(solver_types, make_graph, q, beta, n_steps, n_trials=1000, seed=
         name = None
         taus, acfs = [], []
         total_ess, total_wall = 0.0, 0.0
-        for t in range(n_trials):
+        for t in tqdm(range(n_trials), desc=SolverType.__name__):
             solver = _fresh_solver(SolverType, graph, q, beta, seed + t)
             name = solver.name
 
