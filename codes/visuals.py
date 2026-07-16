@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 STATS_DIR = os.path.join(os.path.dirname(__file__), "stats")
 os.makedirs(STATS_DIR, exist_ok=True)
+COST_TIME_CUTOFF_SECONDS = 0.1
 
 _STYLE = {
     "random":              {"color": "#1f77b4", "ls": "-"},
@@ -212,6 +213,12 @@ def _plot_cost_trajectory(data, x_metric, out_path):
         mean_cost = mean_cost[:prefix_length]
         sem_cost = sem_cost[:prefix_length]
 
+        if x_metric == "time":
+            within_cutoff = x_values <= COST_TIME_CUTOFF_SECONDS
+            x_values = x_values[within_cutoff]
+            mean_cost = mean_cost[within_cutoff]
+            sem_cost = sem_cost[within_cutoff]
+
         ax.plot(x_values, mean_cost, lw=2, color=_color(name),
                 ls=_ls(name), label=name)
         ax.fill_between(
@@ -228,8 +235,9 @@ def _plot_cost_trajectory(data, x_metric, out_path):
         default = "cost_vs_steps.png"
     else:
         xlabel = "Time (seconds)"
-        title = "Lowest Energy Found vs Time"
+        title = "Lowest Energy Found vs Wall clock Time"
         default = "cost_vs_time.png"
+        ax.set_xlim(0.0, COST_TIME_CUTOFF_SECONDS)
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Lowest Energy Found")
@@ -405,7 +413,11 @@ def load_tts_vs_q_data(data_path):
 
 
 def plot_tts_vs_q(data, out_path=None, q_step=3, max_panels=3):
-    """Plot sampled q values as separate bar charts with independent axes."""
+    """Save one log-scale TTS bar chart per selected q value.
+
+    All files use identical y-axis limits, so bar heights can be compared
+    directly between different q values.
+    """
     q_values = np.asarray(data["q_values"])
     per_solver = data["per_solver"]
     meta = data.get("meta", {})
@@ -416,54 +428,74 @@ def plot_tts_vs_q(data, out_path=None, q_step=3, max_panels=3):
 
     names = list(per_solver)
     colors = [_color(name) for name in names]
-    fig, axes = plt.subplots(
-        1,
-        selected.size,
-        figsize=(4.2 * selected.size, 5.2),
-        squeeze=False,
-    )
-    axes = axes[0]
-    legend_handles = None
+    target = int(meta.get("target", 0.99) * 100)
+    values_by_q = [np.asarray([
+        per_solver[name]["tts_seconds"][q_index] for name in names
+    ], dtype=float) for q_index in selected_indices]
+    positive_values = np.concatenate([
+        values[np.isfinite(values) & (values > 0)] for values in values_by_q
+    ])
+    if positive_values.size == 0:
+        raise ValueError("at least one positive finite TTS value is required")
 
-    for ax, q, q_index in zip(axes, selected, selected_indices):
-        values = np.asarray([
-            per_solver[name]["tts_seconds"][q_index] for name in names
-        ], dtype=float)
-        plot_values = np.where(np.isfinite(values), values, np.nan)
+    ymin = 10 ** np.floor(np.log10(positive_values.min() / 1.1))
+    ymax = 10 ** np.ceil(np.log10(positive_values.max() * 1.1))
+    if ymin == ymax:
+        ymin /= 10
+        ymax *= 10
+
+    if out_path is None:
+        output_dir = STATS_DIR
+        filename_prefix = "tts_vs_q"
+    else:
+        output_dir, filename = os.path.split(out_path)
+        filename_prefix, extension = os.path.splitext(filename)
+        if not extension:
+            output_dir = out_path
+            filename_prefix = "tts_vs_q"
+        elif not filename_prefix:
+            filename_prefix = "tts_vs_q"
+        if not output_dir:
+            output_dir = "."
+    os.makedirs(output_dir, exist_ok=True)
+
+    paths = {}
+    for q, values in zip(selected, values_by_q):
+        plot_values = np.where(np.isfinite(values) & (values > 0), values, np.nan)
+        fig, ax = plt.subplots(figsize=(5, 5))
         bars = ax.bar(np.arange(len(names)), plot_values, color=colors)
-        if legend_handles is None:
-            legend_handles = bars
 
-        finite = plot_values[np.isfinite(plot_values)]
-        if finite.size:
-            ax.set_ylim(0, finite.max() * 1.18)
-
-        labels = [
-            f"{value / 1_000_000:.2f}M" if value >= 1_000_000
-            else f"{value:,.3f}"
-            for value in plot_values
-        ]
+        labels = []
+        for value in values:
+            if np.isinf(value):
+                labels.append("∞")
+            elif value <= 0:
+                labels.append("0")
+            elif value >= 1_000_000:
+                labels.append(f"{value / 1_000_000:.2f}M")
+            else:
+                labels.append(f"{value:,.3f}")
         ax.bar_label(bars, labels=labels, padding=3, fontsize=9)
+
+        ax.set_yscale("log")
+        ax.set_ylim(ymin, ymax)
         ax.set_xticks([])
         ax.set_xlabel(f"q={q}", fontsize=12)
-        ax.set_ylabel("TTS seconds")
-        ax.grid(alpha=0.3, axis="y")
+        ax.set_ylabel("TTS seconds (log scale)")
+        ax.set_title(
+            f"TTS to {target}% success  "
+            f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)"
+        )
+        ax.legend(bars, names)
+        ax.grid(alpha=0.3, axis="y", which="both")
+        fig.tight_layout()
 
-    target = int(meta.get("target", 0.99) * 100)
-    fig.suptitle(
-        f"TTS to {target}% success  "
-        f"({meta.get('n_graphs')} graphs × {meta.get('n_trials')} trials)",
-        y=0.99,
-    )
-    fig.legend(legend_handles, names, loc="upper center",
-               bbox_to_anchor=(0.5, 0.93), ncol=len(names))
-    fig.tight_layout(rect=(0, 0, 1, 0.85))
+        path = os.path.join(output_dir, f"{filename_prefix}_q{q}.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        paths[int(q)] = path
 
-    path = _out(out_path, "tts_vs_q.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-    return path
+    return paths
 
 
 def plot_tts_vs_q_log(data, out_path=None):
@@ -500,7 +532,7 @@ def plot_tts_vs_q_log(data, out_path=None):
 
 
 def plot_tts_vs_q_file(data_path, out_path=None):
-    """Create sampled independent-axis bar charts from a NumPy archive."""
+    """Create separate, common-scale log bar charts from a NumPy archive."""
     return plot_tts_vs_q(load_tts_vs_q_data(data_path), out_path=out_path)
 
 
@@ -510,10 +542,14 @@ def plot_tts_vs_q_log_file(data_path, out_path=None):
 
 
 def main():
-    data_path = os.path.join(STATS_DIR, "cost_trajectories.npz")
-    data = np.load(data_path)
+    # data_path = os.path.join(STATS_DIR, "cost_trajectories.npz")
+    # data = np.load(data_path)
 
-    plot_exact_energy_distribution(data)
+    # plot_exact_energy_distribution(data)
+    # for q, path in plot_tts_vs_q_file("stats/tts_vs_q.npz").items():
+    #     print(f"q={q} TTS -> {path}")
+
+    plot_cost_trajectory_file("stats/cost_trajectories.npz")
 
     # for kind, path in plot_cost_trajectory_file(data_path).items():
     #     print(f"cost vs {kind} -> {path}")

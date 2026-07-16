@@ -46,65 +46,24 @@ def make_hard():
 def main():
     GLOBAL.seed_all(SEED)
 
-    corr = B.correctness_data(
-        SAMPLERS,
-        [make_tiny()],
-        q=Q,
-        beta=1.0,
-        n_steps=60_000,
-        n_trials=10,
-        seed=SEED,
-    )
-    print("empirical distribution ->", V.plot_energy_distribution(corr))
+    graphs = [make_medium() for _ in range(N_GRAPHS)]
 
-    print("exact distribution     ->", V.plot_exact_energy_distribution(corr))
+
+    # Convergence
+    relax = B.relaxation_data(OPTIMIZERS, graphs, q=Q, beta=1.0, n_steps=20_000, n_restarts=10, thin=100, seed=SEED)
+
+    print("residual energy->", V.plot_residual_energy(relax))
+
+    # Mixing
+    mix = B.mixing_data(SAMPLERS, graphs, q=Q, beta=1.0, n_steps=50_000, n_trials=10, seed=SEED)
+
+    print("autocorrelation->", V.plot_autocorrelation(mix))
+    print(" mixing summary (smaller tau = faster mixing):")
+    for name, d in mix["per_solver"].items():
+        print(f"    {name:12s} tau={d['tau']:7.1f}")
+
 
     return
-
-
-    # graphs = [make_medium() for _ in range(N_GRAPHS)]
-    cost_data = B.cost_trajectory_data(
-        OPTIMIZERS,
-        graphs,
-        q=Q,
-        beta=3.0,
-        n_steps=COST_STEPS,
-        n_trials=COST_TRIALS,
-        thin=COST_THIN,
-        seed=SEED,
-    )
-    print("Cost trajectory data ->", V.save_cost_trajectory_data(cost_data))
-
-    if not RUN_TTS_SWEEP:
-        return
-
-    # quit()
-
-
-
-    # # Correctness
-    # corr = B.correctness_data(SAMPLERS, [make_tiny()], q=Q, beta=1.0, n_steps=60_000, n_trials=10, seed=SEED)
-
-    # print("distribution   ->", V.plot_energy_distribution(corr))
-    # print("exact distribution ->", V.plot_exact_energy_distribution(corr))
-    # print("KL(exact||empirical) per solver (lower = closer to true distribution):")
-    # for name, d in corr["per_solver"].items():
-    #     print(f"    {name:12s} {d['kl']:.4f}")
-
-    # # Convergence
-    # relax = B.relaxation_data(OPTIMIZERS, graphs, q=Q, beta=1.0, n_steps=20_000, n_restarts=10, thin=100, seed=SEED)
-
-    # print("residual energy->", V.plot_residual_energy(relax))
-
-    # # Mixing
-    # mix = B.mixing_data(SAMPLERS, graphs, q=Q, beta=1.0, n_steps=50_000, n_trials=10, seed=SEED)
-
-    # print("autocorrelation->", V.plot_autocorrelation(mix))
-    # print(" mixing summary (smaller tau = faster mixing):")
-    # for name, d in mix["per_solver"].items():
-    #     print(f"    {name:12s} tau={d['tau']:7.1f}")
-
-
     # TTS versus number of colors.  Each point averages N_GRAPHS medium
     # graph topologies and TTS_TRIALS runs per topology.
 
